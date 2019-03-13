@@ -35,6 +35,8 @@ type NodeInfo struct {
 	// The used resource on that node, including running and terminating
 	// pods
 	Used *Resource
+	// The used resource on the node occupied by backfill tasks
+	Backfilled *Resource
 
 	Allocatable *Resource
 	Capability  *Resource
@@ -45,9 +47,10 @@ type NodeInfo struct {
 func NewNodeInfo(node *v1.Node) *NodeInfo {
 	if node == nil {
 		return &NodeInfo{
-			Releasing: EmptyResource(),
-			Idle:      EmptyResource(),
-			Used:      EmptyResource(),
+			Releasing:  EmptyResource(),
+			Idle:       EmptyResource(),
+			Used:       EmptyResource(),
+			Backfilled: EmptyResource(),
 
 			Allocatable: EmptyResource(),
 			Capability:  EmptyResource(),
@@ -60,9 +63,10 @@ func NewNodeInfo(node *v1.Node) *NodeInfo {
 		Name: node.Name,
 		Node: node,
 
-		Releasing: EmptyResource(),
-		Idle:      NewResource(node.Status.Allocatable),
-		Used:      EmptyResource(),
+		Releasing:  EmptyResource(),
+		Idle:       NewResource(node.Status.Allocatable),
+		Used:       EmptyResource(),
+		Backfilled: EmptyResource(),
 
 		Allocatable: NewResource(node.Status.Allocatable),
 		Capability:  NewResource(node.Status.Capacity),
@@ -72,17 +76,20 @@ func NewNodeInfo(node *v1.Node) *NodeInfo {
 }
 
 func (ni *NodeInfo) Clone() *NodeInfo {
-	res := NewNodeInfo(ni.Node)
-	glog.Infof("new node: capability %v,  allocatable %v, idle %v, used %v", ni.Capability.MilliCPU,
+	newNode := NewNodeInfo(ni.Node)
+	glog.V(3).Infof("new node <%v>: capability %v,  allocatable %v, idle %v, used %v, backfilled %v, releasing %v", ni.Name, ni.Capability.MilliCPU,
 		ni.Allocatable.MilliCPU,
 		ni.Idle.MilliCPU,
-		ni.Used.MilliCPU)
+		ni.Used.MilliCPU,
+		ni.Backfilled.MilliCPU,
+		ni.Releasing.MilliCPU)
 
-	for _, p := range ni.Tasks {
-		res.AddTask(p)
+	for _, task := range ni.Tasks {
+		glog.V(4).Infof("Adding task <%v/%v> to node <%v> with resource request %v", task.Namespace, task.Name, ni.Name, task.Resreq)
+		newNode.AddTask(task)
 	}
 
-	return res
+	return newNode
 }
 
 func (ni *NodeInfo) SetNode(node *v1.Node) {
@@ -115,6 +122,10 @@ func (ni *NodeInfo) AddTask(task *TaskInfo) error {
 	ti := task.Clone()
 
 	if ni.Node != nil {
+		if task.IsBackfill {
+			ni.Backfilled.Add(task.Resreq)
+		}
+
 		switch ti.Status {
 		case Releasing:
 			ni.Releasing.Add(ti.Resreq)
@@ -143,6 +154,10 @@ func (ni *NodeInfo) RemoveTask(ti *TaskInfo) error {
 	}
 
 	if ni.Node != nil {
+		if task.IsBackfill {
+			ni.Backfilled.Sub(task.Resreq)
+		}
+
 		switch task.Status {
 		case Releasing:
 			ni.Releasing.Sub(task.Resreq)
@@ -189,4 +204,11 @@ func (ni *NodeInfo) Pods() (pods []*v1.Pod) {
 	}
 
 	return
+}
+
+func (ni *NodeInfo) GetAccessibleResource() *Resource {
+	idle := ni.Idle.Clone()
+	accessible := idle.Add(ni.Backfilled).Clone()
+	glog.V(3).Infof("Accessible resources on Node <%v>: %v. Idle: %v. Backfilled: %v", ni.Name, accessible, ni.Idle, ni.Backfilled)
+	return accessible
 }

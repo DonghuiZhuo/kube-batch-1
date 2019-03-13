@@ -28,7 +28,7 @@ import (
 )
 
 var defaultSchedulerConf = `
-actions: "allocate, preempt, backfill"
+actions: "allocate, backfill"
 tiers:
 - plugins:
   - name: priority
@@ -40,33 +40,40 @@ tiers:
   - name: nodeorder
 `
 
-func loadSchedulerConf(confStr string) ([]framework.Action, []conf.Tier, error) {
+func getActions(schedulerConf *conf.SchedulerConfiguration) ([]framework.Action, error) {
 	var actions []framework.Action
+	actionNames := strings.Split(schedulerConf.Actions, ",")
+	for _, actionName := range actionNames {
+		if action, found := framework.GetAction(strings.TrimSpace(actionName)); found {
+			actions = append(actions, action)
+		} else {
+			return nil, fmt.Errorf("failed to found Action %s, ignore it", actionName)
+		}
+	}
 
+	return actions, nil
+}
+
+func readFile(confPath string) (string, error) {
+	dat, err := ioutil.ReadFile(confPath)
+	if err != nil {
+		return "", err
+	}
+	return string(dat), nil
+}
+
+func loadConf(confStr string) (*conf.SchedulerConfiguration, error) {
 	schedulerConf := &conf.SchedulerConfiguration{}
 
 	buf := make([]byte, len(confStr))
 	copy(buf, confStr)
 
 	if err := yaml.Unmarshal(buf, schedulerConf); err != nil {
-		return nil, nil, err
-	}
-	actionNames := strings.Split(schedulerConf.Actions, ",")
-	for _, actionName := range actionNames {
-		if action, found := framework.GetAction(strings.TrimSpace(actionName)); found {
-			actions = append(actions, action)
-		} else {
-			return nil, nil, fmt.Errorf("failed to found Action %s, ignore it", actionName)
-		}
+		return nil, err
 	}
 
-	return actions, schedulerConf.Tiers, nil
-}
-
-func readSchedulerConf(confPath string) (string, error) {
-	dat, err := ioutil.ReadFile(confPath)
-	if err != nil {
-		return "", err
+	if schedulerConf.StarvationThreshold == 0 {
+		schedulerConf.StarvationThreshold = conf.DefaultStarvingThreshold
 	}
-	return string(dat), nil
+	return schedulerConf, nil
 }

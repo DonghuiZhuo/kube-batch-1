@@ -14,29 +14,26 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package allocate
+package backfill
 
 import (
 	"fmt"
-
+	"github.com/kubernetes-sigs/kube-batch/pkg/scheduler/cache"
+	"github.com/kubernetes-sigs/kube-batch/pkg/scheduler/conf"
+	"github.com/kubernetes-sigs/kube-batch/pkg/scheduler/plugins/gang"
 	"reflect"
-	"sync"
-	"testing"
 	"time"
 
+	kbv1 "github.com/kubernetes-sigs/kube-batch/pkg/apis/scheduling/v1alpha1"
+	"github.com/kubernetes-sigs/kube-batch/pkg/scheduler/api"
+	"github.com/kubernetes-sigs/kube-batch/pkg/scheduler/framework"
 	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
-
-	kbv1 "github.com/kubernetes-sigs/kube-batch/pkg/apis/scheduling/v1alpha1"
-	"github.com/kubernetes-sigs/kube-batch/pkg/scheduler/api"
-	"github.com/kubernetes-sigs/kube-batch/pkg/scheduler/cache"
-	"github.com/kubernetes-sigs/kube-batch/pkg/scheduler/conf"
-	"github.com/kubernetes-sigs/kube-batch/pkg/scheduler/framework"
-	"github.com/kubernetes-sigs/kube-batch/pkg/scheduler/plugins/drf"
-	"github.com/kubernetes-sigs/kube-batch/pkg/scheduler/plugins/proportion"
+	"sync"
+	"testing"
 )
 
 func buildResourceList(cpu string, memory string) v1.ResourceList {
@@ -44,14 +41,6 @@ func buildResourceList(cpu string, memory string) v1.ResourceList {
 		v1.ResourceCPU:      resource.MustParse(cpu),
 		v1.ResourceMemory:   resource.MustParse(memory),
 		api.GPUResourceName: resource.MustParse("0"),
-	}
-}
-
-func buildResourceListWithGPU(cpu string, memory string, GPU string) v1.ResourceList {
-	return v1.ResourceList{
-		v1.ResourceCPU:      resource.MustParse(cpu),
-		v1.ResourceMemory:   resource.MustParse(memory),
-		api.GPUResourceName: resource.MustParse(GPU),
 	}
 }
 
@@ -92,6 +81,7 @@ func buildPod(ns, n, nn string, p v1.PodPhase, req v1.ResourceList, groupName st
 					},
 				},
 			},
+			Priority: new(int32),
 		},
 	}
 }
@@ -137,9 +127,8 @@ func (fvb *fakeVolumeBinder) BindVolumes(task *api.TaskInfo) error {
 	return nil
 }
 
-func TestAllocate(t *testing.T) {
-	framework.RegisterPluginBuilder("drf", drf.New)
-	framework.RegisterPluginBuilder("proportion", proportion.New)
+func TestBackFill(t *testing.T) {
+	framework.RegisterPluginBuilder("gang", gang.New)
 	defer framework.CleanupPluginBuilders()
 
 	tests := []struct {
@@ -151,21 +140,35 @@ func TestAllocate(t *testing.T) {
 		expected  map[string]string
 	}{
 		{
-			name: "one Job with two Pods on one node",
+			name: "two jobs with one node",
 			podGroups: []*kbv1.PodGroup{
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "pg1",
-						Namespace: "c1",
+						Name:              "pg1",
+						Namespace:         "c1",
+						CreationTimestamp: metav1.Now(),
 					},
 					Spec: kbv1.PodGroupSpec{
-						Queue: "c1",
+						Queue:     "c1",
+						MinMember: 2,
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:              "pg2",
+						Namespace:         "c1",
+						CreationTimestamp: metav1.Now(),
+					},
+					Spec: kbv1.PodGroupSpec{
+						Queue:     "c1",
+						MinMember: 1,
 					},
 				},
 			},
 			pods: []*v1.Pod{
-				buildPod("c1", "p1", "", v1.PodPending, buildResourceList("1", "1G"), "pg1", make(map[string]string), make(map[string]string)),
-				buildPod("c1", "p2", "", v1.PodPending, buildResourceList("1", "1G"), "pg1", make(map[string]string), make(map[string]string)),
+				buildPod("c1", "pg1_1", "", v1.PodPending, buildResourceList("2", "1G"), "pg1", make(map[string]string), make(map[string]string)),
+				buildPod("c1", "pg1_2", "", v1.PodPending, buildResourceList("2", "1G"), "pg1", make(map[string]string), make(map[string]string)),
+				buildPod("c1", "pg2_1", "", v1.PodPending, buildResourceList("2", "1G"), "pg2", make(map[string]string), make(map[string]string)),
 			},
 			nodes: []*v1.Node{
 				buildNode("n1", buildResourceList("2", "4Gi"), make(map[string]string)),
@@ -181,72 +184,12 @@ func TestAllocate(t *testing.T) {
 				},
 			},
 			expected: map[string]string{
-				"c1/p1": "n1",
-				"c1/p2": "n1",
-			},
-		},
-		{
-			name: "two Jobs on one node",
-			podGroups: []*kbv1.PodGroup{
-				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "pg1",
-						Namespace: "c1",
-					},
-					Spec: kbv1.PodGroupSpec{
-						Queue: "c1",
-					},
-				},
-				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "pg2",
-						Namespace: "c2",
-					},
-					Spec: kbv1.PodGroupSpec{
-						Queue: "c2",
-					},
-				},
-			},
-
-			pods: []*v1.Pod{
-				// pending pod with owner1, under c1
-				buildPod("c1", "p1", "", v1.PodPending, buildResourceList("1", "1G"), "pg1", make(map[string]string), make(map[string]string)),
-				// pending pod with owner1, under c1
-				buildPod("c1", "p2", "", v1.PodPending, buildResourceList("1", "1G"), "pg1", make(map[string]string), make(map[string]string)),
-				// pending pod with owner2, under c2
-				buildPod("c2", "p1", "", v1.PodPending, buildResourceList("1", "1G"), "pg2", make(map[string]string), make(map[string]string)),
-				// pending pod with owner, under c2
-				buildPod("c2", "p2", "", v1.PodPending, buildResourceList("1", "1G"), "pg2", make(map[string]string), make(map[string]string)),
-			},
-			nodes: []*v1.Node{
-				buildNode("n1", buildResourceList("2", "4G"), make(map[string]string)),
-			},
-			queues: []*kbv1.Queue{
-				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "c1",
-					},
-					Spec: kbv1.QueueSpec{
-						Weight: 1,
-					},
-				},
-				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "c2",
-					},
-					Spec: kbv1.QueueSpec{
-						Weight: 1,
-					},
-				},
-			},
-			expected: map[string]string{
-				"c2/p1": "n1",
-				"c1/p1": "n1",
+				"c1/pg2_1": "n1",
 			},
 		},
 	}
 
-	allocate := New()
+	backFill := New()
 
 	for i, test := range tests {
 		binder := &fakeBinder{
@@ -282,17 +225,26 @@ func TestAllocate(t *testing.T) {
 			{
 				Plugins: []conf.PluginOption{
 					{
-						Name: "drf",
-					},
-					{
-						Name: "proportion",
+						Name: "gang",
 					},
 				},
 			},
 		})
 		defer framework.CloseSession(ssn)
 
-		allocate.Execute(ssn)
+		for _, job := range ssn.Jobs {
+			for _, task := range job.Tasks {
+				for _, node := range ssn.Nodes {
+					if task.Resreq.LessEqual(node.Idle) {
+						ssn.Allocate(task, node.Name, false)
+					}
+				}
+			}
+		}
+
+		ssn.EnableBackfill = true
+		ssn.StarvationThreshold = conf.DefaultStarvingThreshold
+		backFill.Execute(ssn)
 
 		for i := 0; i < len(test.expected); i++ {
 			select {

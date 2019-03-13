@@ -16,12 +16,24 @@ limitations under the License.
 
 package conf
 
+import "time"
+
+const (
+	// DefaultStarvingThreshold sets teh default value for Starvation Threshold
+	DefaultStarvingThreshold time.Duration = 48 * time.Hour
+)
+
 // SchedulerConfiguration defines the configuration of scheduler.
 type SchedulerConfiguration struct {
 	// Actions defines the actions list of scheduler in order
 	Actions string `yaml:"actions"`
 	// Tiers defines plugins in different tiers
 	Tiers []Tier `yaml:"tiers"`
+	// Enables backfill
+	EnableBackfill bool `yaml:"enable-backfill"`
+	// Starvation Threshold. Jobs that have been pending longer than
+	// the threshold are considered as starving jobs.
+	StarvationThreshold time.Duration `yaml:"starvation-threshold"`
 }
 
 // Tier defines plugin tier

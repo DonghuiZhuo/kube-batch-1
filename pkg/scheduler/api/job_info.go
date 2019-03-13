@@ -20,7 +20,9 @@ import (
 	"fmt"
 	"github.com/golang/glog"
 	"sort"
+	"strconv"
 	"strings"
+	"time"
 
 	"k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1beta1"
@@ -68,6 +70,21 @@ func getJobID(pod *v1.Pod) JobID {
 	return ""
 }
 
+func CheckBackfill(pod *v1.Pod) bool {
+	if len(pod.Annotations) != 0 {
+		if val, found := pod.Annotations[v1alpha1.BackfillAnnotationKey]; found && len(val) != 0 {
+			backfill, err := strconv.ParseBool(val)
+			if err != nil {
+				glog.Errorf("Invalid backfill annotation value '%s': %s", pod.Annotations[v1alpha1.BackfillAnnotationKey], err)
+				return false
+			}
+			glog.Infof("Restored backfill status for pod %s", pod.Name)
+			return backfill
+		}
+	}
+	return false
+}
+
 func NewTaskInfo(pod *v1.Pod) *TaskInfo {
 	req := GetPodResourceWithoutInitContainers(pod)
 	initResreq := GetPodResourceRequest(pod)
@@ -83,7 +100,7 @@ func NewTaskInfo(pod *v1.Pod) *TaskInfo {
 		Pod:        pod,
 		Resreq:     req,
 		InitResreq: initResreq,
-		IsBackfill: false,
+		IsBackfill: CheckBackfill(pod),
 	}
 
 	if pod.Spec.Priority != nil {
@@ -111,7 +128,7 @@ func (ti *TaskInfo) Clone() *TaskInfo {
 }
 
 func (ti TaskInfo) String() string {
-	return fmt.Sprintf("Task (%v:%v/%v): job %v, status %v, pri %v, resreq %v, isBackfill %v",
+	return fmt.Sprintf("Task (%v:%v/%v): job %v, status %v, pri %v, resreq %v, IsBackfill %v",
 		ti.UID, ti.Namespace, ti.Name, ti.Job, ti.Status, ti.Priority, ti.Resreq, ti.IsBackfill)
 }
 
@@ -224,7 +241,6 @@ func (ji *JobInfo) addTaskIndex(ti *TaskInfo) {
 func (ji *JobInfo) AddTaskInfo(ti *TaskInfo) {
 	ji.Tasks[ti.UID] = ti
 	ji.addTaskIndex(ti)
-	ji.Priority = *ti.Pod.Spec.Priority
 
 	ji.TotalRequest.Add(ti.Resreq)
 
@@ -303,24 +319,8 @@ func (ji *JobInfo) Clone() *JobInfo {
 		info.NodeSelector[k] = v
 	}
 
-	// check whether job is running as backfill
-	// propagate to task if yes
-	isJobBackfilled := false
-	for _, cond := range ji.PodGroup.Status.Conditions {
-		if cond.Type == v1alpha1.PodGroupBackfilledType {
-			isJobBackfilled = true
-			break
-		}
-	}
-
 	for _, task := range ji.Tasks {
-		clonedTask := task.Clone()
-		if isJobBackfilled {
-			clonedTask.IsBackfill = true
-			glog.Infof("marked task %s to be backfilled", clonedTask.Name)
-		}
-
-		info.AddTaskInfo(clonedTask)
+		info.AddTaskInfo(task.Clone())
 	}
 
 	return info
@@ -370,4 +370,25 @@ func (ji *JobInfo) FitError() string {
 	}
 	reasonMsg := fmt.Sprintf("0/%v nodes are available, %v.", len(ji.NodesFitDelta), strings.Join(sortReasonsHistogram(), ", "))
 	return reasonMsg
+}
+
+func (ji *JobInfo) GetReadiness() JobReadiness {
+	allocatedTasks := ji.GetTasks(AllocatedStatuses()...)
+	allocatedTasksCnt := int32(len(allocatedTasks))
+	if allocatedTasksCnt >= ji.MinAvailable {
+		return Ready
+	}
+
+	allocatedOverBackfillTasks := ji.GetTasks(AllocatedOverBackfill)
+	allocatedOverBackfillTasksCnt := int32(len(allocatedOverBackfillTasks))
+	if allocatedTasksCnt+allocatedOverBackfillTasksCnt >= ji.MinAvailable {
+		return AlmostReady
+	}
+
+	return NotReady
+}
+
+func (ji *JobInfo) Starving(starvationThreshold time.Duration) bool {
+	readiness := ji.GetReadiness()
+	return readiness != Ready && readiness != AlmostReady && time.Since(ji.CreationTimestamp.Time) >= starvationThreshold
 }

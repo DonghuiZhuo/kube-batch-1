@@ -43,8 +43,8 @@ func (gp *gangPlugin) Name() string {
 	return "gang"
 }
 
-// readyTaskNum return the number of tasks that are ready to run.
 func readyTaskNum(job *api.JobInfo) int32 {
+	// TODO: Why is Pipelined counted as a ready status?
 	occupid := 0
 	for status, tasks := range job.TaskStatusIndex {
 		if api.AllocatedStatus(status) ||
@@ -62,6 +62,7 @@ func validTaskNum(job *api.JobInfo) int32 {
 	occupied := 0
 	for status, tasks := range job.TaskStatusIndex {
 		if api.AllocatedStatus(status) ||
+			status == api.AllocatedOverBackfill ||
 			status == api.Succeeded ||
 			status == api.Pipelined ||
 			status == api.Pending {
@@ -72,6 +73,7 @@ func validTaskNum(job *api.JobInfo) int32 {
 	return int32(occupied)
 }
 
+// TODO: Replace this function with the ready function in JobInfo
 func jobReady(obj interface{}) bool {
 	job := obj.(*api.JobInfo)
 
@@ -80,8 +82,23 @@ func jobReady(obj interface{}) bool {
 	return occupied >= job.MinAvailable
 }
 
+func backFillEligible(obj interface{}) bool {
+	job := obj.(*api.JobInfo)
+
+	allPending := true
+	for _, task := range job.Tasks {
+		if task.Status != api.Pending {
+			allPending = false
+			break
+		}
+	}
+
+	return allPending
+}
+
 func (gp *gangPlugin) OnSessionOpen(ssn *framework.Session) {
 	glog.V(3).Infof("In OnSessionOpen of gangPlugin")
+
 	validJobFn := func(obj interface{}) *api.ValidateResult {
 		job, ok := obj.(*api.JobInfo)
 		if !ok {
@@ -110,8 +127,9 @@ func (gp *gangPlugin) OnSessionOpen(ssn *framework.Session) {
 
 		for _, preemptee := range preemptees {
 			job := ssn.Jobs[preemptee.Job]
-			occupid := readyTaskNum(job)
-			preemptable := job.MinAvailable <= occupid-1 || job.MinAvailable == 1
+
+			// TODO: Bug? Why job.MinAvailable == 1 makes the task preemptable?
+			preemptable := job.MinAvailable <= readyTaskNum(job)-1 || job.MinAvailable == 1
 
 			if !preemptable {
 				glog.V(3).Infof("Can not preempt task <%v/%v> because of gang-scheduling",
@@ -129,11 +147,13 @@ func (gp *gangPlugin) OnSessionOpen(ssn *framework.Session) {
 	// TODO(k82cn): Support preempt/reclaim batch job.
 	ssn.AddReclaimableFn(gp.Name(), preemptableFn)
 	ssn.AddPreemptableFn(gp.Name(), preemptableFn)
+	ssn.AddBackFillEligibleFn(gp.Name(), backFillEligible)
 
 	jobOrderFn := func(l, r interface{}) int {
 		lv := l.(*api.JobInfo)
 		rv := r.(*api.JobInfo)
 
+		// TODO: Almost Ready jobs should be ordered in front of Not Ready jobs
 		lReady := jobReady(lv)
 		rReady := jobReady(rv)
 
@@ -150,25 +170,6 @@ func (gp *gangPlugin) OnSessionOpen(ssn *framework.Session) {
 
 		if rReady {
 			return -1
-		}
-
-		if !lReady && !rReady {
-			if lv.CreationTimestamp.Equal(&rv.CreationTimestamp) {
-				if lv.UID < rv.UID {
-					return -1
-				}
-			} else if lv.CreationTimestamp.Before(&rv.CreationTimestamp) {
-				return -1
-			}
-			return 1
-			/*
-				r := rand.Intn(100)
-				if r%2 == 0 {
-					return 1
-				}
-
-				return -1
-			*/
 		}
 
 		return 0
@@ -200,22 +201,7 @@ func (gp *gangPlugin) OnSessionClose(ssn *framework.Session) {
 				Reason:             v1alpha1.NotEnoughResourcesReason,
 				Message:            msg,
 			}
-		} else {
-			// check if the job is backfilled
-			for _, task := range job.Tasks {
-				if task.IsBackfill {
-					jc = &v1alpha1.PodGroupCondition{
-						Type:               v1alpha1.PodGroupBackfilledType,
-						Status:             v1.ConditionTrue,
-						LastTransitionTime: metav1.Now(),
-						TransitionID:       string(ssn.UID),
-					}
-					glog.Info("marked 'backfilled' condition for job %s", job.Name)
-					break
-				}
-			}
-		}
-		if jc.Status == v1.ConditionTrue {
+
 			if err := ssn.UpdateJobCondition(job, jc); err != nil {
 				glog.Errorf("Failed to update job <%s/%s> condition: %v",
 					job.Namespace, job.Name, err)

@@ -31,12 +31,14 @@ import (
 )
 
 type Scheduler struct {
-	cache          schedcache.Cache
-	config         *rest.Config
-	actions        []framework.Action
-	plugins        []conf.Tier
-	schedulerConf  string
-	schedulePeriod time.Duration
+	cache               schedcache.Cache
+	config              *rest.Config
+	actions             []framework.Action
+	plugins             []conf.Tier
+	schedulerConf       string
+	schedulePeriod      time.Duration
+	enableBackfill      bool
+	starvationThreshold time.Duration
 }
 
 func NewScheduler(
@@ -66,15 +68,25 @@ func (pc *Scheduler) Run(stopCh <-chan struct{}) {
 	// Load configuration of scheduler
 	schedConf := defaultSchedulerConf
 	if len(pc.schedulerConf) != 0 {
-		if schedConf, err = readSchedulerConf(pc.schedulerConf); err != nil {
+		if schedConf, err = readFile(pc.schedulerConf); err != nil {
 			glog.Errorf("Failed to read scheduler configuration '%s', using default configuration: %v",
 				pc.schedulerConf, err)
 			schedConf = defaultSchedulerConf
 		}
 	}
 
-	pc.actions, pc.plugins, err = loadSchedulerConf(schedConf)
+	var config *conf.SchedulerConfiguration
+	if config, err = loadConf(schedConf); err == nil {
+		pc.plugins = config.Tiers
+		pc.starvationThreshold = config.StarvationThreshold
+		pc.enableBackfill = config.EnableBackfill
+		pc.actions, err = getActions(config)
+	}
+
 	if err != nil {
+		glog.Errorf("Failed to read scheduler configuration '%s': %s",
+			schedConf, err)
+
 		panic(err)
 	}
 
@@ -88,6 +100,9 @@ func (pc *Scheduler) runOnce() {
 	defer metrics.UpdateE2eDuration(metrics.Duration(scheduleStartTime))
 
 	ssn := framework.OpenSession(pc.cache, pc.plugins)
+	ssn.EnableBackfill = pc.enableBackfill
+	ssn.StarvationThreshold = pc.starvationThreshold
+
 	defer framework.CloseSession(ssn)
 
 	glog.V(4).Infof("Start executing ...")
