@@ -150,15 +150,6 @@ func closeSession(ssn *Session) {
 			glog.Errorf("Failed to update job <%s/%s>: %v",
 				job.Namespace, job.Name, err)
 		}
-
-		/*
-		for _, task := range job.Tasks {
-			if api.IsBackfill(task.Pod) {
-				// TODO Terry: save backfill into pod annotations.
-				glog.V(3).Infof("patching Pod <%v/%v> as a backfill Pod", task.Pod.Namespace, task.Pod.Name)
-			}
-		}
-		*/
 	}
 
 	ssn.Jobs = nil

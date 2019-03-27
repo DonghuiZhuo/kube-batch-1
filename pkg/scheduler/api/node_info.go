@@ -91,7 +91,7 @@ func (ni *NodeInfo) Clone() *NodeInfo {
 
 	// set backfill status
 	for _, task := range newNode.Tasks {
-		task.IsBackfill = checkBackfill(task.Pod)
+		task.IsBackfill = CheckBackfill(task.Pod)
 		if task.IsBackfill {
 			newNode.Backfilled.Add(task.Resreq)
 		}

@@ -70,7 +70,7 @@ func getJobID(pod *v1.Pod) JobID {
 	return ""
 }
 
-func checkBackfill(pod *v1.Pod) bool {
+func CheckBackfill(pod *v1.Pod) bool {
 	if len(pod.Annotations) != 0 {
 		if val, found := pod.Annotations[v1alpha1.BackfillAnnotationKey]; found && len(val) != 0 {
 			backfill, err := strconv.ParseBool(val)
@@ -100,7 +100,7 @@ func NewTaskInfo(pod *v1.Pod) *TaskInfo {
 		Pod:        pod,
 		Resreq:     req,
 		InitResreq: initResreq,
-		IsBackfill: checkBackfill(pod),
+		IsBackfill: CheckBackfill(pod),
 	}
 
 	if pod.Spec.Priority != nil {
@@ -321,7 +321,7 @@ func (ji *JobInfo) Clone() *JobInfo {
 
 	for _, task := range ji.Tasks {
 		newTask := task.Clone()
-		newTask.IsBackfill = checkBackfill(newTask.Pod)
+		newTask.IsBackfill = CheckBackfill(newTask.Pod)
 		info.AddTaskInfo(newTask)
 	}
 
