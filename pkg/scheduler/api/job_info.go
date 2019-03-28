@@ -321,7 +321,7 @@ func (ji *JobInfo) Clone() *JobInfo {
 
 	for _, task := range ji.Tasks {
 		newTask := task.Clone()
-		newTask.IsBackfill = CheckBackfill(newTask.Pod)
+//		newTask.IsBackfill = CheckBackfill(newTask.Pod)
 		info.AddTaskInfo(newTask)
 	}
 

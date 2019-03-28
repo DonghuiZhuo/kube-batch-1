@@ -122,9 +122,11 @@ func (ni *NodeInfo) AddTask(task *TaskInfo) error {
 	ti := task.Clone()
 
 	// add backfill flag if not done intially yet during cloning snapshot
+	/*
 	if CheckBackfill(ti.Pod) && !ti.IsBackfill {
 		ti.IsBackfill = true
 	}
+	*/
 
 	if ni.Node != nil {
 		if task.IsBackfill {
