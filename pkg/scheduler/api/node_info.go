@@ -89,14 +89,6 @@ func (ni *NodeInfo) Clone() *NodeInfo {
 		newNode.AddTask(task)
 	}
 
-	// set backfill status
-	for _, task := range newNode.Tasks {
-		task.IsBackfill = CheckBackfill(task.Pod)
-		if task.IsBackfill {
-			newNode.Backfilled.Add(task.Resreq)
-		}
-	}
-
 	return newNode
 }
 
@@ -128,6 +120,11 @@ func (ni *NodeInfo) AddTask(task *TaskInfo) error {
 	// Node will hold a copy of task to make sure the status
 	// change will not impact resource in node.
 	ti := task.Clone()
+
+	// add backfill flag if not done intially yet during cloning snapshot
+	if CheckBackfill(ti.Pod) && !ti.IsBackfill {
+		ti.IsBackfill = true
+	}
 
 	if ni.Node != nil {
 		if task.IsBackfill {

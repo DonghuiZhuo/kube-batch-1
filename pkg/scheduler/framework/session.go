@@ -130,12 +130,12 @@ func closeSession(ssn *Session) {
 
 		// patch the backfilled annotation
 		for _, task := range job.Tasks {
-			annotation := make(map[string]string)
 
 			if !task.IsBackfill {
 				continue
 			}
 
+			annotation := make(map[string]string)
 			annotation[v1alpha1.BackfillAnnotationKey] = "true"
 			err := ssn.cache.Patch(task, annotation)
 			if err != nil {
