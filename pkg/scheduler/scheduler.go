@@ -80,7 +80,7 @@ func (pc *Scheduler) Run(stopCh <-chan struct{}) {
 	if config, err = loadConf(schedConf); err == nil {
 		pc.plugins = config.Tiers
 		pc.starvationThreshold = config.StarvationThreshold
-		pc.enableBackfill = config.EnableBackfill
+		pc.enableBackfill = true //config.EnableBackfill
 		pc.enablePreemption = config.EnablePreemption
 		pc.actions, err = getActions(config)
 	}
