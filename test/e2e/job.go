@@ -417,6 +417,106 @@ var _ = Describe("Job E2E Test", func() {
 		checkError(context, err)
 	})
 
+	FIt("Starvation prevention", func() {
+		context := initTestContext()
+		defer cleanupTestContext(context)
+		maxPods := clusterSize(context, oneCPU)
+
+		// create a job to prevent job "big" from running
+		replicaset := createReplicaSet(context, "rs1", maxPods-2, "nginx", oneCPU)
+		err := waitReplicaSetReady(context, replicaset.Name)
+		Expect(err).NotTo(HaveOccurred())
+
+		// create job "big" --> pending
+		bigJob := &jobSpec{
+			name:      "big",
+			namespace: context.namespace,
+			tasks: []taskSpec{
+				{
+					img: "nginx",
+					req: oneCPU,
+					min: maxPods,
+					rep: maxPods,
+				},
+			},
+		}
+
+		_, pg := createJob(context, bigJob)
+		err = waitPodGroupPending(context, pg)
+		Expect(err).NotTo(HaveOccurred())
+		err = waitPodGroupUnschedulable(context, pg)
+		Expect(err).NotTo(HaveOccurred())
+
+		// create backfill job 1 --> running
+		bfJob1 := &jobSpec{
+			name:      "bf-1",
+			namespace: context.namespace,
+			tasks: []taskSpec{
+				{
+					img: "nginx",
+					req: oneCPU,
+					min: 1,
+					rep: 1,
+				},
+			},
+		}
+		_, bfPg1 := createJob(context, bfJob1)
+		err = waitPodGroupReady(context, bfPg1)
+		Expect(err).NotTo(HaveOccurred())
+
+		// delete bfJob
+		for i := range bfJob1.tasks {
+			err = deleteJob(context, fmt.Sprintf("%s-%d", bfJob1.name, i))
+			Expect(err).NotTo(HaveOccurred())
+		}
+
+		// exhaust the starvation time
+		time.Sleep(1 * time.Minute)
+
+		// create another bf job. at this point starvation
+		// should have kicked in so it will not be backfilled
+		bfJob2 := &jobSpec{
+			name:      "bf-2",
+			namespace: context.namespace,
+			tasks: []taskSpec{
+				{
+					img: "nginx",
+					req: oneCPU,
+					min: 1,
+					rep: 1,
+				},
+			},
+		}
+
+		_, bfPg2 := createJob(context, bfJob2)
+		err = waitPodGroupPending(context, bfPg2)
+		Expect(err).NotTo(HaveOccurred())
+		err = waitPodGroupUnschedulable(context, bfPg2)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Delete replica set
+		err = deleteReplicaSet(context, replicaset.Name)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Original job should have enough resource to start
+		err = waitPodGroupReady(context, pg)
+		Expect(err).NotTo(HaveOccurred())
+
+		// backfill job2 should still be pending
+		err = waitPodGroupPending(context, bfPg2)
+		Expect(err).NotTo(HaveOccurred())
+
+		// delete the big job
+		for i := range bigJob.tasks {
+			err = deleteJob(context, fmt.Sprintf("%s-%d", bigJob.name, i))
+			Expect(err).NotTo(HaveOccurred())
+		}
+
+		// now the backfill job 2 can run
+		err = waitPodGroupReady(context, bfPg2)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
 	It("Backfill scheduling", func() {
 		context := initTestContext()
 		defer cleanupTestContext(context)
