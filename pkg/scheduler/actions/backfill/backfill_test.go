@@ -236,7 +236,7 @@ func TestBackFill(t *testing.T) {
 			for _, task := range job.Tasks {
 				for _, node := range ssn.Nodes {
 					if task.Resreq.LessEqual(node.Idle) {
-						ssn.Allocate(task, node.Name, false)
+						ssn.Allocate(task, node.Name, false, false)
 					}
 				}
 			}

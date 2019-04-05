@@ -423,9 +423,26 @@ var _ = Describe("Job E2E Test", func() {
 		maxPods := clusterSize(context, oneCPU)
 
 		// create a job to prevent job "big" from running
+		/*
 		replicaset := createReplicaSet(context, "rs1", maxPods-2, "nginx", oneCPU)
 		err := waitReplicaSetReady(context, replicaset.Name)
 		Expect(err).NotTo(HaveOccurred())
+		*/
+		// create job "small" --> running 
+		smallerJob := &jobSpec{
+			name:      "smaller",
+			namespace: context.namespace,
+			tasks: []taskSpec{
+				{
+					img: "nginx",
+					req: oneCPU,
+					min: maxPods-2,
+					rep: maxPods-2,
+				},
+			},
+		}
+		_, pgs := createJob(context, smallerJob)
+		err := waitPodGroupReady(context, pgs)
 
 		// create job "big" --> pending
 		bigJob := &jobSpec{
@@ -495,8 +512,14 @@ var _ = Describe("Job E2E Test", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		// Delete replica set
+		/*
 		err = deleteReplicaSet(context, replicaset.Name)
 		Expect(err).NotTo(HaveOccurred())
+		*/
+		for i := range smallerJob.tasks {
+			err = deleteJob(context, fmt.Sprintf("%s-%d", smallerJob.name, i))
+			Expect(err).NotTo(HaveOccurred())
+		}
 
 		// Original job should have enough resource to start
 		err = waitPodGroupReady(context, pg)
@@ -517,7 +540,7 @@ var _ = Describe("Job E2E Test", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	It("Backfill scheduling", func() {
+	FIt("Backfill scheduling", func() {
 		context := initTestContext()
 		defer cleanupTestContext(context)
 		maxCnt := clusterSize(context, oneCPU)

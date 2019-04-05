@@ -250,7 +250,7 @@ func (ssn *Session) Pipeline(task *api.TaskInfo, hostname string) error {
 	return nil
 }
 
-func (ssn *Session) Allocate(task *api.TaskInfo, hostname string, usingBackfillTaskRes bool) error {
+func (ssn *Session) Allocate(task *api.TaskInfo, hostname string, usingBackfillTaskRes bool, toOverAllocate bool) error {
 	if err := ssn.cache.AllocateVolumes(task, hostname); err != nil {
 		return err
 	}
@@ -261,6 +261,8 @@ func (ssn *Session) Allocate(task *api.TaskInfo, hostname string, usingBackfillT
 		newStatus := api.Allocated
 		if usingBackfillTaskRes {
 			newStatus = api.AllocatedOverBackfill
+		} else if toOverAllocate {
+			newStatus = api.Pending
 		}
 		if err := job.UpdateTaskStatus(task, newStatus); err != nil {
 			glog.Errorf("Failed to update task <%v/%v> status to %v in Session <%v>: %v",

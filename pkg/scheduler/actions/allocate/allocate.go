@@ -150,11 +150,17 @@ func (alloc *allocateAction) Execute(ssn *framework.Session) {
 				glog.V(3).Infof("Considering Task <%v/%v> on node <%v>. Task request: <%v>; Idle: <%v>; Used: <%v>; Releasing: <%v>; Backfilled: <%v>",
 					task.Namespace, task.Name, node.Name, task.Resreq, node.Idle, node.Used, node.Releasing, node.Backfilled)
 
-				if task.InitResreq.LessEqual(node.GetAccessibleResource()) {
+				netResource := node.Idle.Clone()
+				netResource.Add(node.Used)
+				netResource.Add(node.Releasing)
+				toOverAllocate := (job.Starving(ssn.StarvationThreshold) && node.Idle.Less(task.InitResreq) && task.InitResreq.LessEqual(netResource))
+				glog.Infof("======== %s %v %v", job.Name, toOverAllocate, job.Starving(ssn.StarvationThreshold))
+
+				if task.InitResreq.LessEqual(node.GetAccessibleResource()) || toOverAllocate {
 					glog.V(3).Infof("Binding Task <%v/%v> to node <%v>",
 						task.Namespace, task.Name, node.Name)
 
-					if err := ssn.Allocate(task, node.Name, !task.InitResreq.LessEqual(node.Idle)); err != nil {
+					if err := ssn.Allocate(task, node.Name, !task.InitResreq.LessEqual(node.Idle), toOverAllocate); err != nil {
 						glog.Errorf("Failed to bind Task %v on %v in Session %v",
 							task.UID, node.Name, ssn.UID)
 						continue

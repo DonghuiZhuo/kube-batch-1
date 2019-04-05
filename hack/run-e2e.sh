@@ -29,7 +29,7 @@ function cleanup {
     echo "=============================>>>>> Scheduler Logs <<<<<============================="
     echo "===================================================================================="
 
-    cat scheduler.log
+#    cat scheduler.log
 }
 
 trap cleanup EXIT

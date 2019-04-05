@@ -129,13 +129,14 @@ func (gp *gangPlugin) OnSessionOpen(ssn *framework.Session) {
 			job := ssn.Jobs[preemptee.Job]
 
 			// TODO: Bug? Why job.MinAvailable == 1 makes the task preemptable?
-			preemptable := job.MinAvailable <= readyTaskNum(job)-1 || job.MinAvailable == 1
+			preemptable := job.MinAvailable <= readyTaskNum(job)-1 
 
 			if !preemptable {
 				glog.V(3).Infof("Can not preempt task <%v/%v> because of gang-scheduling",
 					preemptee.Namespace, preemptee.Name)
 			} else {
 				victims = append(victims, preemptee)
+				glog.V(3).Infof("MinAvailable = %d, readyTaskNum = %d job = %+v", job.MinAvailable, readyTaskNum(job), job)
 			}
 		}
 
