@@ -262,7 +262,7 @@ func (ssn *Session) Allocate(task *api.TaskInfo, hostname string, usingBackfillT
 		if usingBackfillTaskRes {
 			newStatus = api.AllocatedOverBackfill
 		} else if toOverAllocate {
-			newStatus = api.Pending
+			newStatus = api.OverOccupied
 		}
 		if err := job.UpdateTaskStatus(task, newStatus); err != nil {
 			glog.Errorf("Failed to update task <%v/%v> status to %v in Session <%v>: %v",
@@ -300,7 +300,7 @@ func (ssn *Session) Allocate(task *api.TaskInfo, hostname string, usingBackfillT
 		}
 	}
 
-	if ssn.JobReady(job) && !usingBackfillTaskRes {
+	if ssn.JobReady(job) && !usingBackfillTaskRes && !toOverAllocate{
 		for _, task := range job.TaskStatusIndex[api.Allocated] {
 			if err := ssn.dispatch(task); err != nil {
 				glog.Errorf("Failed to dispatch task <%v/%v>: %v",

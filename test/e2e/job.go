@@ -423,12 +423,6 @@ var _ = Describe("Job E2E Test", func() {
 		maxPods := clusterSize(context, oneCPU)
 
 		// create a job to prevent job "big" from running
-		/*
-		replicaset := createReplicaSet(context, "rs1", maxPods-2, "nginx", oneCPU)
-		err := waitReplicaSetReady(context, replicaset.Name)
-		Expect(err).NotTo(HaveOccurred())
-		*/
-		// create job "small" --> running 
 		smallerJob := &jobSpec{
 			name:      "smaller",
 			namespace: context.namespace,
@@ -490,7 +484,7 @@ var _ = Describe("Job E2E Test", func() {
 		// exhaust the starvation time
 		time.Sleep(1 * time.Minute)
 
-		// create another bf job. at this point starvation
+		// create another backfill job. at this point starvation
 		// should have kicked in so it will not be backfilled
 		bfJob2 := &jobSpec{
 			name:      "bf-2",
@@ -512,16 +506,12 @@ var _ = Describe("Job E2E Test", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		// Delete replica set
-		/*
-		err = deleteReplicaSet(context, replicaset.Name)
-		Expect(err).NotTo(HaveOccurred())
-		*/
 		for i := range smallerJob.tasks {
 			err = deleteJob(context, fmt.Sprintf("%s-%d", smallerJob.name, i))
 			Expect(err).NotTo(HaveOccurred())
 		}
 
-		// Original job should have enough resource to start
+		// big job should have enough resource to start
 		err = waitPodGroupReady(context, pg)
 		Expect(err).NotTo(HaveOccurred())
 
