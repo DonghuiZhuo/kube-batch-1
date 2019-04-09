@@ -136,7 +136,8 @@ func (ni *NodeInfo) AddTask(task *TaskInfo) error {
 			ni.Idle.Sub(ti.Resreq)
 		}
 
-		if ti.Pod.Spec.SchedulerName != "kube-batch" && ti.Pod.Status.Phase == v1.PodRunning {
+		// removing pod resources not maintained by kube-batch from node.ALlocatable 
+		if ti.Job == "" && ti.Pod.Status.Phase == v1.PodRunning {
 			glog.Infof("adjusted Allocatable on node %s by %v", ni.Name, ti.Resreq)
 			ni.Allocatable.Sub(ti.Resreq)
 		}

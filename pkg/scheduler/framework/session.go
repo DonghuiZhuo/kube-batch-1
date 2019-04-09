@@ -300,7 +300,7 @@ func (ssn *Session) Allocate(task *api.TaskInfo, hostname string, usingBackfillT
 		}
 	}
 
-	if ssn.JobReady(job) && !usingBackfillTaskRes && !toOverAllocate{
+	if ssn.JobReady(job) {
 		for _, task := range job.TaskStatusIndex[api.Allocated] {
 			if err := ssn.dispatch(task); err != nil {
 				glog.Errorf("Failed to dispatch task <%v/%v>: %v",
