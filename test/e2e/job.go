@@ -417,7 +417,7 @@ var _ = Describe("Job E2E Test", func() {
 		checkError(context, err)
 	})
 
-	FIt("Starvation prevention", func() {
+	It("Starvation prevention", func() {
 		context := initTestContext()
 		defer cleanupTestContext(context)
 		maxPods := clusterSize(context, oneCPU)
@@ -530,7 +530,7 @@ var _ = Describe("Job E2E Test", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	FIt("Backfill scheduling", func() {
+	It("Backfill scheduling", func() {
 		context := initTestContext()
 		defer cleanupTestContext(context)
 		maxCnt := clusterSize(context, oneCPU)
