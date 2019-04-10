@@ -157,17 +157,17 @@ func (alloc *allocateAction) Execute(ssn *framework.Session) {
 					netResource := node.Allocatable.Clone()
 					for _, nodeTask := range node.Tasks {
 						if nodeTask.Job == job.UID &&
-						(nodeTask.Status == api.OverOccupied || nodeTask.Job == job.UID && nodeTask.Status == api.Allocated) {
+							(nodeTask.Status == api.OverOccupied ||
+								(nodeTask.Job == job.UID && nodeTask.Status == api.Allocated)) {
 							netResource.Sub(nodeTask.InitResreq)
-							glog.Infof("removing %v of task %s from node %s", nodeTask.InitResreq, nodeTask.Name, node.Name)
 						}
 					}
 
 					// toOverAllocateForStarv == true means when allocating for starving job, over-allocate resources ignoring 
 					// resources being used on the node to prevent other non-startving job from taking the resources
-					toOverAllocateForStarv = (isJobStarving &&
-					!task.InitResreq.LessEqual(node.GetAccessibleResource()) &&
-					task.InitResreq.LessEqual(netResource))
+					toOverAllocateForStarv = isJobStarving &&
+						!task.InitResreq.LessEqual(node.GetAccessibleResource()) &&
+						task.InitResreq.LessEqual(netResource)
 				}
 
 				if task.InitResreq.LessEqual(node.GetAccessibleResource()) || toOverAllocateForStarv {

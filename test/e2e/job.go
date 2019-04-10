@@ -430,8 +430,8 @@ var _ = Describe("Job E2E Test", func() {
 				{
 					img: "nginx",
 					req: oneCPU,
-					min: maxPods-2,
-					rep: maxPods-2,
+					min: maxPods - 2,
+					rep: maxPods - 2,
 				},
 			},
 		}
