@@ -127,23 +127,6 @@ func closeSession(ssn *Session) {
 			continue
 		}
 
-		// patch the backfilled annotation
-		for _, task := range job.Tasks {
-
-			if !task.IsBackfill {
-				continue
-			}
-
-			annotation := make(map[string]string)
-			annotation[v1alpha1.BackfillAnnotationKey] = "true"
-			err := ssn.cache.Patch(task, annotation)
-			if err != nil {
-				glog.Errorf("Failed to patch task/pod <%s/%s>: %v", task.Name, task.Pod.Name, err)
-			} else {
-				glog.Infof("pod %s is marked as a backfill", task.Pod.Name)
-			}
-		}
-
 		job.PodGroup.Status = jobStatus(ssn, job)
 		if _, err := ssn.cache.UpdateJobStatus(job); err != nil {
 			glog.Errorf("Failed to update job <%s/%s>: %v",
@@ -160,6 +143,10 @@ func closeSession(ssn *Session) {
 	ssn.queueOrderFns = nil
 
 	glog.V(3).Infof("Close Session %v", ssn.UID)
+}
+
+func (ssn *Session) PatchAnnotation(task *api.TaskInfo, annotations map[string]string) error {
+	return ssn.cache.Patch(task, annotations)
 }
 
 func jobStatus(ssn *Session, jobInfo *api.JobInfo) v1alpha1.PodGroupStatus {
@@ -305,6 +292,7 @@ func (ssn *Session) Allocate(task *api.TaskInfo, hostname string, usingBackfillT
 			if err := ssn.dispatch(task); err != nil {
 				glog.Errorf("Failed to dispatch task <%v/%v>: %v",
 					task.Namespace, task.Name, err)
+
 				return err
 			}
 		}

@@ -19,6 +19,7 @@ package backfill
 import (
 	"github.com/golang/glog"
 
+	"github.com/kubernetes-sigs/kube-batch/pkg/apis/scheduling/v1alpha1"
 	"github.com/kubernetes-sigs/kube-batch/pkg/scheduler/api"
 	"github.com/kubernetes-sigs/kube-batch/pkg/scheduler/framework"
 )
@@ -133,10 +134,35 @@ func backFill(ssn *framework.Session, job *api.JobInfo) {
 			}
 
 			if task.InitResreq.LessEqual(node.Idle) {
+
+				/* patch the annotation */
+				annotation := map[string]string{v1alpha1.BackfillAnnotationKey: "true"}
+				err := ssn.PatchAnnotation(task, annotation)
+				if err != nil {
+					glog.Errorf("Failed to patch backfill=true to task/pod <%s/%s>: %v, will not backfill on this node %s",
+						task.Name, task.Pod.Name, err, node.Name)
+					continue
+				}
+
+				glog.Infof("pod %s is marked as a backfill", task.Pod.Name)
 				task.IsBackfill = true
+
 				glog.V(3).Infof("Binding backfill task <%v/%v> to node <%v>", task.Namespace, task.Name, node.Name)
 				if err := ssn.Allocate(task, node.Name, false, false); err != nil {
 					glog.Errorf("Failed to bind backfill task %v on %v in Session %v: %s", task.UID, node.Name, ssn.UID, err)
+
+					// when task cannot be allocated, remove the backfill annotation if present
+					if task.IsBackfill == true {
+						annotation := map[string]string{v1alpha1.BackfillAnnotationKey: "false"}
+						err := ssn.PatchAnnotation(task, annotation)
+						if err != nil {
+							glog.Errorf("Failed to patch backfill=false to task/pod <%s/%s>: %v",
+							task.Name, task.Pod.Name, err)
+						} else {
+							glog.V(3).Infof("set backfill annotation to false")
+						}
+					}
+
 					continue
 				}
 				break
