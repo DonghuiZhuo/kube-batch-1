@@ -73,13 +73,13 @@ func getJobID(pod *v1.Pod) JobID {
 func CheckBackfill(pod *v1.Pod) bool {
 	if len(pod.Annotations) != 0 {
 		if val, found := pod.Annotations[v1alpha1.BackfillAnnotationKey]; found && len(val) != 0 {
-			backfill, err := strconv.ParseBool(val)
+			hasBackfillAnnotation, err := strconv.ParseBool(val)
 			if err != nil {
 				glog.Errorf("Invalid backfill annotation value '%s': %s", pod.Annotations[v1alpha1.BackfillAnnotationKey], err)
 				return false
 			}
 			glog.Infof("Restored backfill status for pod %s", pod.Name)
-			return backfill
+			return hasBackfillAnnotation && pod.Status.Phase == v1.PodRunning
 		}
 	}
 	return false

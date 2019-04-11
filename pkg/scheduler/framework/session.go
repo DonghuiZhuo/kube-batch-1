@@ -288,7 +288,22 @@ func (ssn *Session) Allocate(task *api.TaskInfo, hostname string, usingBackfillT
 	}
 
 	if ssn.JobReady(job) {
+
+		// patch all the pod with backfill annotation. if any fails, abort the backfill
+		for _, pendingTask := range job.TaskStatusIndex[api.Allocated] {
+			if pendingTask.IsBackfill {
+				annotation := map[string]string{v1alpha1.BackfillAnnotationKey: "true"}
+				err := ssn.PatchAnnotation(pendingTask, annotation)
+				if err != nil {
+					glog.Errorf("Failed to patch backfill=true to task/pod <%s/%s>: %v",
+						pendingTask.Name, pendingTask.Pod.Name, err)
+					return err
+				}
+			}
+		}
+
 		for _, task := range job.TaskStatusIndex[api.Allocated] {
+
 			if err := ssn.dispatch(task); err != nil {
 				glog.Errorf("Failed to dispatch task <%v/%v>: %v",
 					task.Namespace, task.Name, err)
