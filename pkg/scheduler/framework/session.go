@@ -237,7 +237,34 @@ func (ssn *Session) Pipeline(task *api.TaskInfo, hostname string) error {
 	return nil
 }
 
-func (ssn *Session) Allocate(task *api.TaskInfo, hostname string, usingBackfillTaskRes bool, toOverAllocate bool) error {
+func (ssn *Session) ToOverAllocate(node *api.NodeInfo, task *api.TaskInfo) bool {
+	job, found := ssn.Jobs[task.Job]
+	if !found {
+		return false
+	}
+	isJobStarving := job.Starving(ssn.StarvationThreshold)
+	if !isJobStarving {
+		return false
+	}
+
+	// allow over-allocate for starving job
+	netResource := node.Allocatable.Clone()
+	for _, nodeTask := range node.Tasks {
+		if nodeTask.Job == job.UID &&
+			(nodeTask.Status == api.OverOccupied ||
+				(nodeTask.Job == job.UID && nodeTask.Status == api.Allocated)) {
+			netResource.Sub(nodeTask.InitResreq)
+		}
+	}
+
+	// return true means when allocating for starving job, over-allocate resources ignoring
+	// resources being used on the node to prevent other non-startving job from taking the resources
+	return !task.InitResreq.LessEqual(node.GetAccessibleResource()) &&
+		task.InitResreq.LessEqual(netResource)
+}
+
+func (ssn *Session) Allocate(task *api.TaskInfo, node *api.NodeInfo) error {
+	hostname := node.Name
 	if err := ssn.cache.AllocateVolumes(task, hostname); err != nil {
 		return err
 	}
@@ -245,10 +272,13 @@ func (ssn *Session) Allocate(task *api.TaskInfo, hostname string, usingBackfillT
 	// Only update status in session
 	job, found := ssn.Jobs[task.Job]
 	if found {
+		isJobStarving := job.Starving(ssn.StarvationThreshold)
+		usingBackfillTaskRes := !task.InitResreq.LessEqual(node.Idle) && !isJobStarving
+
 		newStatus := api.Allocated
 		if usingBackfillTaskRes {
 			newStatus = api.AllocatedOverBackfill
-		} else if toOverAllocate {
+		} else if ssn.ToOverAllocate(node, task) {
 			newStatus = api.OverOccupied
 		}
 		if err := job.UpdateTaskStatus(task, newStatus); err != nil {

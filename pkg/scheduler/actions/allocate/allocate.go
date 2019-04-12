@@ -150,32 +150,10 @@ func (alloc *allocateAction) Execute(ssn *framework.Session) {
 				glog.V(3).Infof("Considering Task <%v/%v> on node <%v>. Task request: <%v>; Idle: <%v>; Used: <%v>; Releasing: <%v>; Backfilled: <%v>",
 					task.Namespace, task.Name, node.Name, task.Resreq, node.Idle, node.Used, node.Releasing, node.Backfilled)
 
-				// allow over-allocate for starving job 
-				isJobStarving := job.Starving(ssn.StarvationThreshold)
-				toOverAllocateForStarv := false
-				if isJobStarving {
-					netResource := node.Allocatable.Clone()
-					for _, nodeTask := range node.Tasks {
-						if nodeTask.Job == job.UID &&
-							(nodeTask.Status == api.OverOccupied ||
-								(nodeTask.Job == job.UID && nodeTask.Status == api.Allocated)) {
-							netResource.Sub(nodeTask.InitResreq)
-						}
-					}
-
-					// toOverAllocateForStarv == true means when allocating for starving job, over-allocate resources ignoring 
-					// resources being used on the node to prevent other non-startving job from taking the resources
-					toOverAllocateForStarv = isJobStarving &&
-						!task.InitResreq.LessEqual(node.GetAccessibleResource()) &&
-						task.InitResreq.LessEqual(netResource)
-				}
-
-				if task.InitResreq.LessEqual(node.GetAccessibleResource()) || toOverAllocateForStarv {
+				if task.InitResreq.LessEqual(node.GetAccessibleResource()) || ssn.ToOverAllocate(node, task) {
 					glog.V(3).Infof("Binding Task <%v/%v> to node <%v>", task.Namespace, task.Name, node.Name)
 
-					usingBackfillTaskRes := !task.InitResreq.LessEqual(node.Idle) && !isJobStarving
-
-					if err := ssn.Allocate(task, node.Name, usingBackfillTaskRes, toOverAllocateForStarv); err != nil {
+					if err := ssn.Allocate(task, node); err != nil {
 						glog.Errorf("Failed to bind Task %v on %v in Session %v",
 							task.UID, node.Name, ssn.UID)
 						continue
@@ -191,7 +169,7 @@ func (alloc *allocateAction) Execute(ssn *framework.Session) {
 				}
 
 				// Allocate releasing resource to the task if any.
-				if !isJobStarving && task.InitResreq.LessEqual(node.Releasing) {
+				if !job.Starving(ssn.StarvationThreshold) && task.InitResreq.LessEqual(node.Releasing) {
 					glog.V(3).Infof("Pipelining Task <%v/%v> to node <%v> for <%v> on <%v>",
 						task.Namespace, task.Name, node.Name, task.InitResreq, node.Releasing)
 					if err := ssn.Pipeline(task, node.Name); err != nil {

@@ -57,7 +57,7 @@ func (alloc *backfillAction) Execute(ssn *framework.Session) {
 					}
 
 					glog.V(3).Infof("Binding Task <%v/%v> to node <%v>", task.Namespace, task.Name, node.Name)
-					if err := ssn.Allocate(task, node.Name, false, false); err != nil {
+					if err := ssn.Allocate(task, node); err != nil {
 						glog.Errorf("Failed to bind Task %v on %v in Session %v", task.UID, node.Name, ssn.UID)
 						continue
 					}
@@ -136,7 +136,7 @@ func backFill(ssn *framework.Session, job *api.JobInfo) {
 			if task.InitResreq.LessEqual(node.Idle) {
 				task.IsBackfill = true
 				glog.V(3).Infof("Binding backfill task <%v/%v> to node <%v>", task.Namespace, task.Name, node.Name)
-				if err := ssn.Allocate(task, node.Name, false, false); err != nil {
+				if err := ssn.Allocate(task, node); err != nil {
 					glog.Errorf("Failed to bind backfill task %v on %v in Session %v: %s", task.UID, node.Name, ssn.UID, err)
 					allocateFailed = true
 				}
