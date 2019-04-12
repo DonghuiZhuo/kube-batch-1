@@ -79,7 +79,15 @@ func CheckBackfill(pod *v1.Pod) bool {
 				return false
 			}
 			glog.Infof("Restored backfill status for pod %s", pod.Name)
-			return hasBackfillAnnotation && pod.Status.Phase == v1.PodRunning
+
+			isPodScheduled := false
+			for _, cond := range pod.Status.Conditions {
+				if cond.Type == v1.PodScheduled {
+					isPodScheduled = true
+					break
+				}
+			}
+			return hasBackfillAnnotation && isPodScheduled
 		}
 	}
 	return false
