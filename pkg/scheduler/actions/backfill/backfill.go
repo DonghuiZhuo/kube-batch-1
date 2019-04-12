@@ -83,7 +83,7 @@ func (alloc *backfillAction) Execute(ssn *framework.Session) {
 		// we can back fill more jobs in the next step.
 		resourceReleased := false
 		for _, job := range ssn.Jobs {
-			if ssn.JobReady(job) || job.GetReadiness() == api.AlmostReady || job.Starving(ssn.StarvationThreshold) {
+			if ssn.JobReady(job) || job.GetReadiness() == api.OverResourceReady || job.Starving(ssn.StarvationThreshold) {
 				glog.V(3).Infof("Disable backfill on job <%v/%v>", job.Namespace, job.Name)
 			} else {
 				releaseReservedResources(ssn, job)

@@ -76,7 +76,7 @@ const (
 	// state exceeds the job's minim task number requirement. In other words,
 	// #(Allocated Tasks) < Job.MinAvailable &&
 	// #(Allocated Tasks) + #(AllocatedOverBackFill Tasks) >= Job.MinAvailable
-	AlmostReady
+	OverResourceReady
 
 	// #(Allocated Tasks) + #(AllocatedOverBackFill Tasks) < Job.MinAvailable
 	NotReady

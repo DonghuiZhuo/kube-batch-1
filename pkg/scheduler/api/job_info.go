@@ -390,7 +390,7 @@ func (ji *JobInfo) GetReadiness() JobReadiness {
 	allocatedOverBackfillTasks := ji.GetTasks(AllocatedOverBackfill)
 	allocatedOverBackfillTasksCnt := int32(len(allocatedOverBackfillTasks))
 	if allocatedTasksCnt+allocatedOverBackfillTasksCnt >= ji.MinAvailable {
-		return AlmostReady
+		return OverResourceReady
 	}
 
 	return NotReady
@@ -398,5 +398,5 @@ func (ji *JobInfo) GetReadiness() JobReadiness {
 
 func (ji *JobInfo) Starving(starvationThreshold time.Duration) bool {
 	readiness := ji.GetReadiness()
-	return readiness != Ready && readiness != AlmostReady && time.Since(ji.CreationTimestamp.Time) >= starvationThreshold
+	return readiness != Ready && readiness != OverResourceReady && time.Since(ji.CreationTimestamp.Time) >= starvationThreshold
 }
