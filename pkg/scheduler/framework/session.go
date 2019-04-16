@@ -18,6 +18,7 @@ package framework
 
 import (
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/golang/glog"
@@ -320,18 +321,44 @@ func (ssn *Session) Allocate(task *api.TaskInfo, node *api.NodeInfo) error {
 	if ssn.JobReady(job) {
 
 		// patch all the pod with backfill annotation. if any fails, abort the backfill
+		var wg sync.WaitGroup
+		errChannel := make(chan error, 1)
+		finished := make(chan bool, 1)
+
 		for _, pendingTask := range job.TaskStatusIndex[api.Allocated] {
 			if pendingTask.IsBackfill {
-				annotation := map[string]string{v1alpha1.BackfillAnnotationKey: "true"}
-				err := ssn.PatchAnnotation(pendingTask, annotation)
-				if err != nil {
-					glog.Errorf("Failed to patch backfill=true to task/pod <%s/%s>: %v",
-						pendingTask.Name, pendingTask.Pod.Name, err)
-					return err
-				}
+
+				wg.Add(1)
+				go func(pendingTask *api.TaskInfo) {
+					defer wg.Done()
+
+					annotation := map[string]string{v1alpha1.BackfillAnnotationKey: "true"}
+					err := ssn.PatchAnnotation(pendingTask, annotation)
+					if err != nil {
+						glog.Errorf("Failed to patch backfill=true to task/pod <%s/%s>: %v",
+							pendingTask.Name, pendingTask.Pod.Name, err)
+						errChannel <- err
+						return
+					}
+				}(pendingTask)
 			}
 		}
 
+		go func() {
+			wg.Wait()
+			close(finished)
+		}()
+
+		select {
+		case <-finished:
+		case err := <-errChannel:
+			if err != nil {
+				fmt.Println("error ", err)
+				return err
+			}
+		}
+
+		// actually dispatch the pod to node
 		for _, task := range job.TaskStatusIndex[api.Allocated] {
 
 			if err := ssn.dispatch(task); err != nil {
