@@ -199,10 +199,23 @@ func TestDeleteTaskInfo(t *testing.T) {
 
 func TestIsBackfill(t *testing.T) {
 	owner := buildOwnerReference("uid")
+
 	noAnnotationPod := buildPod("c1", "noAnnotationPod", "", v1.PodPending, buildResourceList("1000m", "1G"), []metav1.OwnerReference{owner}, make(map[string]string))
+
 	notBackfillPod := buildPod("c1", "notBackfillPod", "", v1.PodPending, buildResourceList("1000m", "1G"), []metav1.OwnerReference{owner}, make(map[string]string))
-	notBackfillPod.Annotations = map[string]string{v1alpha1.BackfillAnnotationKey: "false"}
-	backfillPod := buildBackfillPod("c1", "backfillPod", "", v1.PodPending, buildResourceList("1000m", "1G"), []metav1.OwnerReference{owner}, make(map[string]string))
+	notBackfillPod.Annotations[v1alpha1.BackfillAnnotationKey] = "false"
+
+	nonBondCond := &v1.PodCondition {}
+	nonBondBackfillPod := buildBackfillPod("c1", "backfillPod", "", v1.PodPending,
+										  buildResourceList("1000m", "1G"),
+										  []metav1.OwnerReference{owner}, make(map[string]string), nonBondCond)
+
+	bondCond := &v1.PodCondition {
+		Type: v1.PodScheduled,
+	}
+	bondBackfillPod := buildBackfillPod("c1", "backfillPod", "", v1.PodPending,
+		buildResourceList("1000m", "1G"),
+		[]metav1.OwnerReference{owner}, make(map[string]string), bondCond)
 
 	tests := []struct {
 		name     string
@@ -210,8 +223,13 @@ func TestIsBackfill(t *testing.T) {
 		expected bool
 	}{
 		{
-			name:     "test backfill pod",
-			pod:      backfillPod,
+			name:     "test non-bound backfill pod",
+			pod:      nonBondBackfillPod,
+			expected: false,
+		},
+		{
+			name:     "test bond backfill pod",
+			pod:      bondBackfillPod,
 			expected: true,
 		},
 		{

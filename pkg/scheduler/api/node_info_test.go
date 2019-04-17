@@ -139,8 +139,14 @@ func TestNodeInfo_RemovePod(t *testing.T) {
 func TestNodeInfo_AddBackfillTask(t *testing.T) {
 	// case1
 	case01_node := buildNode("n1", buildResourceList("8000m", "10G"))
-	case01_pod1 := buildPod("c1", "p1", "n1", v1.PodRunning, buildResourceList("1000m", "1G"), []metav1.OwnerReference{}, make(map[string]string))
-	case01_pod2 := buildBackfillPod("c1", "p2", "n1", v1.PodRunning, buildResourceList("2000m", "2G"), []metav1.OwnerReference{}, make(map[string]string))
+	case01_pod1 := buildPod("c1", "p1", "n1", v1.PodRunning, buildResourceList("1000m", "1G"),
+							 []metav1.OwnerReference{}, make(map[string]string))
+
+	bondCond := &v1.PodCondition {
+		Type: v1.PodScheduled,
+	}
+	case01_pod2 := buildBackfillPod("c1", "p2", "n1", v1.PodRunning, buildResourceList("2000m", "2G"),
+									[]metav1.OwnerReference{}, make(map[string]string), bondCond)
 
 	tests := []struct {
 		name               string

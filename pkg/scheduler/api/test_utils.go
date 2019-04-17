@@ -73,6 +73,7 @@ func buildPod(ns, n, nn string, p v1.PodPhase, req v1.ResourceList, owner []meta
 	return &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			UID:             types.UID(fmt.Sprintf("%v-%v", ns, n)),
+			Annotations:     map[string]string{v1alpha1.GroupNameAnnotationKey: "testpodgroup"},
 			Name:            n,
 			Namespace:       ns,
 			OwnerReferences: owner,
@@ -95,10 +96,16 @@ func buildPod(ns, n, nn string, p v1.PodPhase, req v1.ResourceList, owner []meta
 	}
 }
 
-func buildBackfillPod(ns, n, nn string, p v1.PodPhase, req v1.ResourceList, owner []metav1.OwnerReference, labels map[string]string) *v1.Pod {
+func buildBackfillPod(ns, n, nn string, p v1.PodPhase, req v1.ResourceList,
+					 owner []metav1.OwnerReference, labels map[string]string, podCondition *v1.PodCondition) *v1.Pod {
 	pod := buildPod(ns, n, nn, p, req, owner, labels)
-	pod.Annotations = map[string]string{
-		v1alpha1.BackfillAnnotationKey: "true",
+	pod.Annotations[v1alpha1.BackfillAnnotationKey] =  "true"
+
+	if podCondition != nil {
+		if pod.Status.Conditions == nil {
+			pod.Status.Conditions = []v1.PodCondition{}
+		}
+		pod.Status.Conditions = append(pod.Status.Conditions, *podCondition)
 	}
 	return pod
 }

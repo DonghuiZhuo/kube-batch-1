@@ -199,8 +199,8 @@ func (ni NodeInfo) String() string {
 		i++
 	}
 
-	return fmt.Sprintf("Node (%s): idle <%v>, used <%v>, releasing <%v>, taints <%v>%s",
-		ni.Name, ni.Idle, ni.Used, ni.Releasing, ni.Node.Spec.Taints, res)
+	return fmt.Sprintf("Node (%s): idle <%v>, used <%v>, releasing <%v>, backfilled <%v>, allocatable <%v>, taints <%v>%s",
+		ni.Name, ni.Idle, ni.Used, ni.Releasing, ni.Backfilled, ni.Allocatable, ni.Node.Spec.Taints, res)
 
 }
 
