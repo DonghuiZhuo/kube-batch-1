@@ -96,14 +96,21 @@ type fakePatcher struct {
 	sync.Mutex
 	patches map[string]string
 	c       chan string
+	toFail  bool
 }
 
 func (fp *fakePatcher) Patch(p *v1.Pod, annotations map[string]string) error {
 	fp.Lock()
 	defer fp.Unlock()
 
+	if fp.toFail {
+		fp.c <- "not patched"
+		return fmt.Errorf("patch fails on purpose")
+	}
+
 	if len(fp.patches) > 0 || len(annotations) > 1 {
-		return fmt.Errorf("more than 1 patches")
+		return fmt.Errorf("len(fp.patches)=%d, len(annotation)=%d",
+			len(fp.patches), len(annotations))
 	}
 
 	for key, val := range annotations {
@@ -162,9 +169,15 @@ func TestBackFill(t *testing.T) {
 		queues          []*kbv1.Queue
 		expectedBinds   map[string]string
 		expectedPatches map[string]string
+		patcher         *fakePatcher
 	}{
 		{
-			name: "two jobs with one node",
+			name: "two jobs with one node, patching succeeds",
+			patcher: &fakePatcher{
+				patches: map[string]string{},
+				c:       make(chan string),
+				toFail:  false,
+			},
 			podGroups: []*kbv1.PodGroup{
 				{
 					ObjectMeta: metav1.ObjectMeta{
@@ -214,19 +227,69 @@ func TestBackFill(t *testing.T) {
 				"scheduling.k8s.io/kube-batch-backfill": "true",
 			},
 		},
+		{
+			name: "two jobs with one node, patching fails",
+			patcher: &fakePatcher{
+				patches: map[string]string{},
+				c:       make(chan string),
+				toFail:  true,
+			},
+			podGroups: []*kbv1.PodGroup{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:              "pg1",
+						Namespace:         "c1",
+						CreationTimestamp: metav1.Now(),
+					},
+					Spec: kbv1.PodGroupSpec{
+						Queue:     "c1",
+						MinMember: 2,
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:              "pg2",
+						Namespace:         "c1",
+						CreationTimestamp: metav1.Now(),
+					},
+					Spec: kbv1.PodGroupSpec{
+						Queue:     "c1",
+						MinMember: 1,
+					},
+				},
+			},
+			pods: []*v1.Pod{
+				buildPod("c1", "pg1_1", "", v1.PodPending, buildResourceList("2", "1G"), "pg1", make(map[string]string), make(map[string]string)),
+				buildPod("c1", "pg1_2", "", v1.PodPending, buildResourceList("2", "1G"), "pg1", make(map[string]string), make(map[string]string)),
+				buildPod("c1", "pg2_1", "", v1.PodPending, buildResourceList("2", "1G"), "pg2", make(map[string]string), make(map[string]string)),
+			},
+			nodes: []*v1.Node{
+				buildNode("n1", buildResourceList("2", "4Gi"), make(map[string]string)),
+			},
+			queues: []*kbv1.Queue{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "c1",
+					},
+					Spec: kbv1.QueueSpec{
+						Weight: 1,
+					},
+				},
+			},
+			expectedBinds:   map[string]string{},
+			expectedPatches: map[string]string{},
+		},
 	}
 
 	backFill := New()
-
 	for i, test := range tests {
 		binder := &fakeBinder{
 			binds: map[string]string{},
 			c:     make(chan string),
 		}
-		patcher := &fakePatcher{
-			patches: map[string]string{},
-			c:       make(chan string),
-		}
+
+		patcher := test.patcher
+
 		schedulerCache := &cache.SchedulerCache{
 			Nodes:         make(map[string]*api.NodeInfo),
 			Jobs:          make(map[api.JobID]*api.JobInfo),
@@ -275,17 +338,25 @@ func TestBackFill(t *testing.T) {
 		}
 
 		ssn.EnableBackfill = true
-		ssn.StarvationThreshold = conf.DefaultStarvingThreshold
+		ssn.StarvationThreshold = 1 * time.Minute
 
 		go func(session *framework.Session) {
 			backFill.Execute(session)
 		}(ssn)
 
-		for i := 0; i < len(test.expectedPatches); i++ {
+		if patcher.toFail {
 			select {
 			case <-patcher.c:
 			case <-time.After(3 * time.Second):
 				t.Errorf("Failed to get patching request.")
+			}
+		} else {
+			for i := 0; i < len(test.expectedPatches); i++ {
+				select {
+				case <-patcher.c:
+				case <-time.After(3 * time.Second):
+					t.Errorf("Failed to get patching request.")
+				}
 			}
 		}
 
@@ -293,11 +364,19 @@ func TestBackFill(t *testing.T) {
 			t.Errorf("case %d (%s): expected: %v, got %v ", i, test.name, test.expectedPatches, patcher.patches)
 		}
 
-		for i := 0; i < len(test.expectedBinds); i++ {
+		if patcher.toFail {
 			select {
 			case <-binder.c:
+				t.Errorf("Should not bind.")
 			case <-time.After(3 * time.Second):
-				t.Errorf("Failed to get binding request.")
+			}
+		} else {
+			for i := 0; i < len(test.expectedBinds); i++ {
+				select {
+				case <-binder.c:
+				case <-time.After(3 * time.Second):
+					t.Errorf("Failed to get binding request.")
+				}
 			}
 		}
 
