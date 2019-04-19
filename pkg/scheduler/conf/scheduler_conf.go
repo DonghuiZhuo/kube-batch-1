@@ -22,6 +22,8 @@ type SchedulerConfiguration struct {
 	Actions string `yaml:"actions"`
 	// Tiers defines plugins in different tiers
 	Tiers []Tier `yaml:"tiers"`
+	// Enables backfill
+	EnableBackfill bool `yaml:"enable-backfill"`
 }
 
 // Tier defines plugin tier
