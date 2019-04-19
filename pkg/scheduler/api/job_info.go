@@ -450,6 +450,7 @@ func (ji *JobInfo) ValidTaskNum() int32 {
 	occupied := 0
 	for status, tasks := range ji.TaskStatusIndex {
 		if AllocatedStatus(status) ||
+			status == AllocatedOverBackfill ||
 			status == Succeeded ||
 			status == Pipelined ||
 			status == Pending {
