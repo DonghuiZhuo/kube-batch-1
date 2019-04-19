@@ -18,7 +18,9 @@ package api
 
 import (
 	"fmt"
+	"github.com/golang/glog"
 	"sort"
+	"strconv"
 	"strings"
 
 	"k8s.io/api/core/v1"
@@ -51,6 +53,10 @@ type TaskInfo struct {
 	VolumeReady bool
 
 	Pod *v1.Pod
+
+	// Indicates whether or not the task is a backfill task. Either persist
+	// across sessions, or add this flag in pod annotation.
+	IsBackfill bool
 }
 
 func getJobID(pod *v1.Pod) JobID {
@@ -63,6 +69,32 @@ func getJobID(pod *v1.Pod) JobID {
 	}
 
 	return ""
+}
+
+// CheckBackfill check if the pod has valid backfill annotation
+func CheckBackfill(pod *v1.Pod) bool {
+	if len(pod.Annotations) != 0 {
+		if val, found := pod.Annotations[v1alpha1.BackfillAnnotationKey]; found && len(val) != 0 {
+			hasBackfillAnnotation, err := strconv.ParseBool(val)
+			if err != nil {
+				glog.Errorf("Invalid backfill annotation value '%s': %s", pod.Annotations[v1alpha1.BackfillAnnotationKey], err)
+				return false
+			}
+			glog.Infof("Restored backfill status for pod %s", pod.Name)
+
+			isPodScheduled := false
+			if pod.Status.Conditions != nil {
+				for _, cond := range pod.Status.Conditions {
+					if cond.Type == v1.PodScheduled {
+						isPodScheduled = true
+						break
+					}
+				}
+			}
+			return hasBackfillAnnotation && isPodScheduled
+		}
+	}
+	return false
 }
 
 // NewTaskInfo creates new taskInfo object for a Pod
@@ -83,6 +115,7 @@ func NewTaskInfo(pod *v1.Pod) *TaskInfo {
 		Pod:        pod,
 		Resreq:     req,
 		InitResreq: initResreq,
+		IsBackfill: CheckBackfill(pod),
 	}
 
 	if pod.Spec.Priority != nil {
@@ -106,13 +139,14 @@ func (ti *TaskInfo) Clone() *TaskInfo {
 		Resreq:      ti.Resreq.Clone(),
 		InitResreq:  ti.InitResreq.Clone(),
 		VolumeReady: ti.VolumeReady,
+		IsBackfill:  ti.IsBackfill,
 	}
 }
 
 // String returns the taskInfo details in a string
 func (ti TaskInfo) String() string {
-	return fmt.Sprintf("Task (%v:%v/%v): job %v, status %v, pri %v, resreq %v",
-		ti.UID, ti.Namespace, ti.Name, ti.Job, ti.Status, ti.Priority, ti.Resreq)
+	return fmt.Sprintf("Task (%v:%v/%v): job %v, status %v, pri %v, resreq %v, IsBackfill %v",
+		ti.UID, ti.Namespace, ti.Name, ti.Job, ti.Status, ti.Priority, ti.Resreq, ti.IsBackfill)
 }
 
 // JobID is the type of JobInfo's ID.
@@ -371,6 +405,25 @@ func (ji *JobInfo) FitError() string {
 	return reasonMsg
 }
 
+// GetReadiness Check whether the job is read or over-resource-ready
+// over-resource-ready means the job is ready but some resource
+// is used by backfilled job
+func (ji *JobInfo) GetReadiness() JobReadiness {
+	allocatedTasks := ji.GetTasks(AllocatedStatuses()...)
+	allocatedTasksCnt := int32(len(allocatedTasks))
+	if allocatedTasksCnt >= ji.MinAvailable {
+		return Ready
+	}
+
+	allocatedOverBackfillTasks := ji.GetTasks(AllocatedOverBackfill)
+	allocatedOverBackfillTasksCnt := int32(len(allocatedOverBackfillTasks))
+	if allocatedTasksCnt+allocatedOverBackfillTasksCnt >= ji.MinAvailable {
+		return OverResourceReady
+	}
+
+	return NotReady
+}
+
 // ReadyTaskNum returns the number of tasks that are ready.
 func (ji *JobInfo) ReadyTaskNum() int32 {
 	occupid := 0
@@ -401,6 +454,7 @@ func (ji *JobInfo) ValidTaskNum() int32 {
 	occupied := 0
 	for status, tasks := range ji.TaskStatusIndex {
 		if AllocatedStatus(status) ||
+			status == AllocatedOverBackfill ||
 			status == Succeeded ||
 			status == Pipelined ||
 			status == Pending {

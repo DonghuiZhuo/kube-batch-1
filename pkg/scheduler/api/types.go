@@ -23,6 +23,12 @@ const (
 	// Pending means the task is pending in the apiserver.
 	Pending TaskStatus = 1 << iota
 
+	// AllocatedOverBackfill means that the task is allocated with resources
+	// that are currently occupied by backfill tasks.
+	// Task T is allocated to Node N as an AllocatedOverBackfill task if,
+	// and only if, N.IdleResource < T.RequestResource <= N.AllocatableResource.
+	AllocatedOverBackfill
+
 	// Allocated means the scheduler assigns a host to it.
 	Allocated
 
@@ -53,10 +59,40 @@ const (
 	Unknown
 )
 
+// JobReadiness type of job readiness
+type JobReadiness int
+
+const (
+	// Ready : a job is Ready if the number of tasks in Allocated state
+	// exceeds the job's minimum task number requirement. In other words,
+	// #(Allocated Tasks) >= Job.MinAvailable
+	// A Ready job can be dispatch to a node right away.
+	Ready JobReadiness = 1 << iota
+
+	// OverResourceReady : a job is OverResourceReady if the job is not Ready for dispatch, but
+	// the number of tasks in Allocated state exceeds the job's minim task
+	// number requirement. In other words,
+	// #(Allocated Tasks) < Job.MinAvailable &&
+	// #(Allocated Tasks) + #(AllocatedOverBackFill Tasks) >= Job.MinAvailable
+	OverResourceReady
+
+	// NotReady : #(Allocated Tasks) + #(AllocatedOverBackFill Tasks) < Job.MinAvailable
+	NotReady
+)
+
+// AllocatedStatuses all status of allocated
+func AllocatedStatuses() []TaskStatus {
+	return []TaskStatus{Bound, Binding, Running, Allocated}
+}
+
 func (ts TaskStatus) String() string {
 	switch ts {
 	case Pending:
 		return "Pending"
+	case Allocated:
+		return "Allocated"
+	case AllocatedOverBackfill:
+		return "AllocatedOverBackfill"
 	case Binding:
 		return "Binding"
 	case Bound:
@@ -106,3 +142,6 @@ type EvictableFn func(*TaskInfo, []*TaskInfo) []*TaskInfo
 
 // NodeOrderFn is the func declaration used to get priority score for a node for a particular task.
 type NodeOrderFn func(*TaskInfo, *NodeInfo) (float64, error)
+
+// BackFillEligibleFn is the func declaration used to get backfill eligiblity
+type BackFillEligibleFn func(interface{}) bool

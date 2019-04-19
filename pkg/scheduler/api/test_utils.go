@@ -18,6 +18,7 @@ package api
 
 import (
 	"fmt"
+	"github.com/kubernetes-sigs/kube-batch/pkg/apis/scheduling/v1alpha1"
 	"reflect"
 
 	"k8s.io/api/core/v1"
@@ -68,10 +69,25 @@ func buildNode(name string, alloc v1.ResourceList) *v1.Node {
 	}
 }
 
+func buildBackfillPod(ns, n, nn string, p v1.PodPhase, req v1.ResourceList,
+	owner []metav1.OwnerReference, labels map[string]string, podCondition *v1.PodCondition) *v1.Pod {
+	pod := buildPod(ns, n, nn, p, req, owner, labels)
+	pod.Annotations[v1alpha1.BackfillAnnotationKey] = "true"
+
+	if podCondition != nil {
+		if pod.Status.Conditions == nil {
+			pod.Status.Conditions = []v1.PodCondition{}
+		}
+		pod.Status.Conditions = append(pod.Status.Conditions, *podCondition)
+	}
+	return pod
+}
+
 func buildPod(ns, n, nn string, p v1.PodPhase, req v1.ResourceList, owner []metav1.OwnerReference, labels map[string]string) *v1.Pod {
 	return &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			UID:             types.UID(fmt.Sprintf("%v-%v", ns, n)),
+			Annotations:     map[string]string{v1alpha1.GroupNameAnnotationKey: "testpodgroup"},
 			Name:            n,
 			Namespace:       ns,
 			OwnerReferences: owner,

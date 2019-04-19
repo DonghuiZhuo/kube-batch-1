@@ -75,6 +75,11 @@ func (ssn *Session) AddJobValidFn(name string, fn api.ValidateExFn) {
 	ssn.jobValidFns[name] = fn
 }
 
+// AddBackFillEligibleFn add backfill eligiblity function
+func (ssn *Session) AddBackFillEligibleFn(name string, fn api.BackFillEligibleFn) {
+	ssn.backFillEligibleFns[name] = fn
+}
+
 // Reclaimable invoke reclaimable function of the plugins
 func (ssn *Session) Reclaimable(reclaimer *api.TaskInfo, reclaimees []*api.TaskInfo) []*api.TaskInfo {
 	var victims []*api.TaskInfo
@@ -196,6 +201,24 @@ func (ssn *Session) JobReady(obj interface{}) bool {
 	}
 
 	return true
+}
+
+// BackFillEligible check backfill eligiblity
+func (ssn *Session) BackFillEligible(obj interface{}) bool {
+	for _, tier := range ssn.Tiers {
+		for _, plugin := range tier.Plugins {
+			jrf, found := ssn.backFillEligibleFns[plugin.Name]
+			if !found {
+				continue
+			}
+
+			if jrf(obj) {
+				return true
+			}
+		}
+	}
+
+	return false
 }
 
 // JobPipelined invoke pipelined function of the plugins

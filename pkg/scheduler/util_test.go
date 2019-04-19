@@ -135,10 +135,11 @@ tiers:
 		},
 	}
 
-	_, tiers, err := loadSchedulerConf(configuration)
+	config, err := loadSchedulerConf(configuration)
 	if err != nil {
 		t.Errorf("Failed to load scheduler configuration: %v", err)
 	}
+	tiers := config.Tiers
 	if !reflect.DeepEqual(tiers, expectedTiers) {
 		t.Errorf("Failed to set default settings for plugins, expected: %+v, got %+v",
 			expectedTiers, tiers)

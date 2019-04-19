@@ -17,6 +17,7 @@ limitations under the License.
 package e2e
 
 import (
+	"fmt"
 	"time"
 
 	. "github.com/onsi/ginkgo"
@@ -284,5 +285,70 @@ var _ = Describe("Job E2E Test", func() {
 		evicted, err := jobEvicted(context, job1, now)()
 		Expect(err).NotTo(HaveOccurred())
 		Expect(evicted).NotTo(BeTrue())
+	})
+
+	It("Backfill scheduling", func() {
+		context := initTestContext()
+		defer cleanupTestContext(context)
+		maxCnt := clusterSize(context, oneCPU)
+
+		replicaset := createReplicaSet(context, "rs-1", maxCnt-2, "nginx", oneCPU)
+		err := waitReplicaSetReady(context, replicaset.Name)
+		Expect(err).NotTo(HaveOccurred())
+
+		jSpec := &jobSpec{
+			name:      "gang-qj",
+			namespace: context.namespace,
+			tasks: []taskSpec{
+				{
+					img: "busybox",
+					req: oneCPU,
+					min: maxCnt,
+					rep: maxCnt,
+				},
+			},
+		}
+
+		job := createJob(context, jSpec)
+		err = waitJobPending(context, job)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Job stuck in pending because no sufficient
+		// resources are available.
+		err = waitJobUnschedulable(context, job)
+		Expect(err).NotTo(HaveOccurred())
+
+		bfJobSpec := &jobSpec{
+			name:      "bf-qj",
+			namespace: context.namespace,
+			tasks: []taskSpec{
+				{
+					img: "busybox",
+					req: oneCPU,
+					min: 1,
+					rep: 1,
+				},
+			},
+		}
+
+		// Submit bfJob which requires less resources.
+		// bfJob will start running because backfill is enabled.
+		backfillJob := createJob(context, bfJobSpec)
+		err = waitJobReady(context, backfillJob)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Delete bfJob
+		for i := range bfJobSpec.tasks {
+			err = deleteJob(context, fmt.Sprintf("%s-%d", bfJobSpec.name, i))
+			Expect(err).NotTo(HaveOccurred())
+		}
+
+		// Delete replica set
+		err = deleteReplicaSet(context, replicaset.Name)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Original job should have enough resource to start
+		err = waitJobReady(context, job)
+		Expect(err).NotTo(HaveOccurred())
 	})
 })
