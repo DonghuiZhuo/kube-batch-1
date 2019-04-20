@@ -17,7 +17,6 @@ limitations under the License.
 package e2e
 
 import (
-	"fmt"
 	"time"
 
 	. "github.com/onsi/ginkgo"
@@ -292,7 +291,7 @@ var _ = Describe("Job E2E Test", func() {
 		defer cleanupTestContext(context)
 		maxCnt := clusterSize(context, oneCPU)
 
-		replicaset := createReplicaSet(context, "rs-1", maxCnt-2, "nginx", oneCPU)
+		replicaset := createReplicaSet(context, "rs-1", maxCnt-2, defaultNginxImage, oneCPU)
 		err := waitReplicaSetReady(context, replicaset.Name)
 		Expect(err).NotTo(HaveOccurred())
 
@@ -301,7 +300,7 @@ var _ = Describe("Job E2E Test", func() {
 			namespace: context.namespace,
 			tasks: []taskSpec{
 				{
-					img: "busybox",
+					img: defaultBusyBoxImage,
 					req: oneCPU,
 					min: maxCnt,
 					rep: maxCnt,
@@ -323,7 +322,7 @@ var _ = Describe("Job E2E Test", func() {
 			namespace: context.namespace,
 			tasks: []taskSpec{
 				{
-					img: "busybox",
+					img: defaultBusyBoxImage,
 					req: oneCPU,
 					min: 1,
 					rep: 1,
@@ -338,10 +337,8 @@ var _ = Describe("Job E2E Test", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		// Delete bfJob
-		for i := range bfJobSpec.tasks {
-			err = deleteJob(context, fmt.Sprintf("%s-%d", bfJobSpec.name, i))
-			Expect(err).NotTo(HaveOccurred())
-		}
+		err = deleteJob(context, bfJobSpec)
+		Expect(err).NotTo(HaveOccurred())
 
 		// Delete replica set
 		err = deleteReplicaSet(context, replicaset.Name)

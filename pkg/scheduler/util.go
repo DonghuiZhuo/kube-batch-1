@@ -39,7 +39,6 @@ tiers:
   - name: predicates
   - name: proportion
   - name: nodeorder
-enable-backfill: true
 `
 
 func loadSchedulerConf(confStr string) (*conf.SchedulerConfiguration, error) {
