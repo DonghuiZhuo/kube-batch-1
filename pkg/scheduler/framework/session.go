@@ -19,6 +19,7 @@ package framework
 import (
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/golang/glog"
 
@@ -40,12 +41,13 @@ type Session struct {
 
 	cache cache.Cache
 
-	Jobs           map[api.JobID]*api.JobInfo
-	Nodes          map[string]*api.NodeInfo
-	Queues         map[api.QueueID]*api.QueueInfo
-	Backlog        []*api.JobInfo
-	Tiers          []conf.Tier
-	EnableBackfill bool
+	Jobs                map[api.JobID]*api.JobInfo
+	Nodes               map[string]*api.NodeInfo
+	Queues              map[api.QueueID]*api.QueueInfo
+	Backlog             []*api.JobInfo
+	Tiers               []conf.Tier
+	EnableBackfill      bool
+	StarvationThreshold time.Duration
 
 	plugins             map[string]Plugin
 	eventHandlers       []*EventHandler
@@ -242,6 +244,32 @@ func (ssn *Session) Pipeline(task *api.TaskInfo, hostname string) error {
 	return nil
 }
 
+func (ssn *Session) ToOverAllocate(node *api.NodeInfo, task *api.TaskInfo) bool {
+	job, found := ssn.Jobs[task.Job]
+	if !found {
+		return false
+	}
+	isJobStarving := job.Starving(ssn.StarvationThreshold)
+	if !isJobStarving {
+		return false
+	}
+
+	// allow over-allocate for starving job
+	netResource := node.Allocatable.Clone()
+	for _, nodeTask := range node.Tasks {
+		if nodeTask.Job == job.UID &&
+			(nodeTask.Status == api.OverOccupied ||
+				nodeTask.Status == api.Allocated) {
+			netResource.Sub(nodeTask.InitResreq)
+		}
+	}
+
+	// return true means when allocating for starving job, over-allocate resources ignoring
+	// resources being used on the node to prevent other non-startving job from taking the resources
+	return !task.InitResreq.LessEqual(node.GetAccessibleResource()) &&
+		task.InitResreq.LessEqual(netResource)
+}
+
 //Allocate the task to the node in the session
 func (ssn *Session) Allocate(task *api.TaskInfo, node *api.NodeInfo) error {
 	hostname := node.Name
@@ -253,10 +281,13 @@ func (ssn *Session) Allocate(task *api.TaskInfo, node *api.NodeInfo) error {
 	job, found := ssn.Jobs[task.Job]
 	if found {
 
-		usingBackfillTaskRes := !task.InitResreq.LessEqual(node.Idle)
+		isJobStarving := job.Starving(ssn.StarvationThreshold)
+		usingBackfillTaskRes := !task.InitResreq.LessEqual(node.Idle) && !isJobStarving
 		newStatus := api.Allocated
 		if usingBackfillTaskRes {
 			newStatus = api.AllocatedOverBackfill
+		} else if ssn.ToOverAllocate(node, task) {
+			newStatus = api.OverOccupied
 		}
 
 		if err := job.UpdateTaskStatus(task, newStatus); err != nil {

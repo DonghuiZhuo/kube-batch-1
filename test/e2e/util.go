@@ -556,7 +556,7 @@ func waitJobUnschedulable(ctx *context, job *vkv1.Job) error {
 }
 
 func deleteJob(ctx *context, spec *jobSpec) error {
-	foreground := metav1.DeletePropagationForeground
+	foreground := metav1.DeletePropagationBackground
 	return ctx.vkclient.BatchV1alpha1().Jobs(spec.namespace).Delete(spec.name, &metav1.DeleteOptions{
 		PropagationPolicy: &foreground,
 	})

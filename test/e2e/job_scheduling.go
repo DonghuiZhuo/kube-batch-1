@@ -286,6 +286,114 @@ var _ = Describe("Job E2E Test", func() {
 		Expect(evicted).NotTo(BeTrue())
 	})
 
+	It("Starvation prevention", func() {
+		context := initTestContext()
+		defer cleanupTestContext(context)
+		maxPods := clusterSize(context, oneCPU)
+
+		// create a small job to prevent job "big" from running
+		smallJobSpec := &jobSpec{
+			name:      "smaller",
+			namespace: context.namespace,
+			tasks: []taskSpec{
+				{
+					img: defaultNginxImage,
+					req: oneCPU,
+					min: maxPods - 2,
+					rep: maxPods - 2,
+				},
+			},
+		}
+		smallJob := createJob(context, smallJobSpec)
+		err := waitJobReady(context, smallJob)
+		Expect(err).NotTo(HaveOccurred())
+
+		// create job "big" --> pending
+		bigJobSpec := &jobSpec{
+			name:      "big",
+			namespace: context.namespace,
+			tasks: []taskSpec{
+				{
+					img: defaultNginxImage,
+					req: oneCPU,
+					min: maxPods,
+					rep: maxPods,
+				},
+			},
+		}
+
+		bigJob := createJob(context, bigJobSpec)
+		err = waitJobPending(context, bigJob)
+		Expect(err).NotTo(HaveOccurred())
+		err = waitJobUnschedulable(context, bigJob)
+		Expect(err).NotTo(HaveOccurred())
+
+		// create backfill job 1 --> running
+		bfJob1Spec := &jobSpec{
+			name:      "bf-1",
+			namespace: context.namespace,
+			tasks: []taskSpec{
+				{
+					img: defaultNginxImage,
+					req: oneCPU,
+					min: 1,
+					rep: 1,
+				},
+			},
+		}
+		bfJob1 := createJob(context, bfJob1Spec)
+		err = waitJobReady(context, bfJob1)
+		Expect(err).NotTo(HaveOccurred())
+
+		// delete bfJob
+		err = deleteJob(context, bfJob1Spec)
+		Expect(err).NotTo(HaveOccurred())
+
+		// exhaust the starvation time
+		time.Sleep(1 * time.Minute)
+
+		// create another backfill job. at this point starvation
+		// should have kicked in so it will not be backfilled
+		bfJob2Spec := &jobSpec{
+			name:      "bf-2",
+			namespace: context.namespace,
+			tasks: []taskSpec{
+				{
+					img: defaultNginxImage,
+					req: oneCPU,
+					min: 1,
+					rep: 1,
+				},
+			},
+		}
+
+		bfJob2 := createJob(context, bfJob2Spec)
+		err = waitJobPending(context, bfJob2)
+		Expect(err).NotTo(HaveOccurred())
+		err = waitJobUnschedulable(context, bfJob2)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Delete small job
+		err = deleteJob(context, smallJobSpec)
+		Expect(err).NotTo(HaveOccurred())
+
+		// big job should have enough resource to start
+		err = waitJobReady(context, bigJob)
+		Expect(err).NotTo(HaveOccurred())
+
+		// backfill job2 should still be pending
+		err = waitJobPending(context, bfJob2)
+		Expect(err).NotTo(HaveOccurred())
+
+		// delete the big job
+		err = deleteJob(context, bigJobSpec)
+		Expect(err).NotTo(HaveOccurred())
+
+		// now the backfill job 2 can run
+		err = waitJobReady(context, bfJob2)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
 	It("Backfill scheduling", func() {
 		context := initTestContext()
 		defer cleanupTestContext(context)

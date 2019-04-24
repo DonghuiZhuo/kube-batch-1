@@ -29,6 +29,10 @@ const (
 	// and only if, N.IdleResource < T.RequestResource <= N.AllocatableResource.
 	AllocatedOverBackfill
 
+	// OverOccupied means the job is allocated even when there is no immedicately
+	// available resources due to starvation
+	OverOccupied
+
 	// Allocated means the scheduler assigns a host to it.
 	Allocated
 

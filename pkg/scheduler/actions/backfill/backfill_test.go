@@ -340,6 +340,7 @@ func TestBackFill(t *testing.T) {
 		}
 
 		ssn.EnableBackfill = true
+		ssn.StarvationThreshold = conf.DefaultStarvingThreshold
 
 		go func(session *framework.Session) {
 			backFill.Execute(session)

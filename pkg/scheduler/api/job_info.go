@@ -22,6 +22,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1beta1"
@@ -422,6 +423,11 @@ func (ji *JobInfo) GetReadiness() JobReadiness {
 	}
 
 	return NotReady
+}
+
+func (ji *JobInfo) Starving(starvationThreshold time.Duration) bool {
+	readiness := ji.GetReadiness()
+	return readiness != Ready && readiness != OverResourceReady && time.Since(ji.CreationTimestamp.Time) >= starvationThreshold
 }
 
 // ReadyTaskNum returns the number of tasks that are ready.

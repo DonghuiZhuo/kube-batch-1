@@ -33,13 +33,14 @@ import (
 // Scheduler watches for new unscheduled pods for kubebatch. It attempts to find
 // nodes that they fit on and writes bindings back to the api server.
 type Scheduler struct {
-	cache          schedcache.Cache
-	config         *rest.Config
-	actions        []framework.Action
-	plugins        []conf.Tier
-	schedulerConf  string
-	schedulePeriod time.Duration
-	enableBackfill bool
+	cache               schedcache.Cache
+	config              *rest.Config
+	actions             []framework.Action
+	plugins             []conf.Tier
+	schedulerConf       string
+	schedulePeriod      time.Duration
+	enableBackfill      bool
+	starvationThreshold time.Duration
 }
 
 // NewScheduler returns a scheduler
@@ -82,6 +83,7 @@ func (pc *Scheduler) Run(stopCh <-chan struct{}) {
 	if config, err = loadSchedulerConf(schedConf); err == nil {
 		pc.plugins = config.Tiers
 		pc.enableBackfill = config.EnableBackfill
+		pc.starvationThreshold = config.StarvationThreshold
 		pc.actions, err = getActions(config)
 	} else {
 		glog.Errorf("Failed to read scheduler configuration '%s': %s",
@@ -101,6 +103,8 @@ func (pc *Scheduler) runOnce() {
 
 	ssn := framework.OpenSession(pc.cache, pc.plugins)
 	ssn.EnableBackfill = pc.enableBackfill
+	ssn.StarvationThreshold = pc.starvationThreshold
+
 	defer framework.CloseSession(ssn)
 
 	for _, action := range pc.actions {

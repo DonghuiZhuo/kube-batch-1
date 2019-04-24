@@ -69,6 +69,10 @@ func loadSchedulerConf(confStr string) (*conf.SchedulerConfiguration, error) {
 		}
 	}
 
+	if schedulerConf.StarvationThreshold == 0 {
+		schedulerConf.StarvationThreshold = conf.DefaultStarvingThreshold
+	}
+
 	return schedulerConf, nil
 }
 func getActions(schedulerConf *conf.SchedulerConfiguration) ([]framework.Action, error) {

@@ -144,4 +144,14 @@ tiers:
 		t.Errorf("Failed to set default settings for plugins, expected: %+v, got %+v",
 			expectedTiers, tiers)
 	}
+
+	if config.EnableBackfill != false {
+		t.Errorf("Failed to set default settings for EnableBackfill, expected: %+v, got %+v",
+			false, config.EnableBackfill)
+	}
+
+	if config.StarvationThreshold != conf.DefaultStarvingThreshold {
+		t.Errorf("Failed to set default settings for StarvationThreshold, expected: %+v, got %+v",
+			conf.DefaultStarvingThreshold, config.StarvationThreshold)
+	}
 }
