@@ -25,8 +25,12 @@ import (
 )
 
 func TestLoadSchedulerConf(t *testing.T) {
-	configuration := `
-actions: "allocate, backfill"
+	configurations := []string{`
+actions:
+- name: allocate
+- name: backfill
+  options:
+    enabledNonBestEffort: true
 tiers:
 - plugins:
   - name: priority
@@ -37,8 +41,34 @@ tiers:
   - name: predicates
   - name: proportion
   - name: nodeorder
-`
+`, `
+actions:
+- name: allocate
+- name: backfill
+tiers:
+- plugins:
+  - name: priority
+  - name: gang
+  - name: conformance
+- plugins:
+  - name: drf
+  - name: predicates
+  - name: proportion
+  - name: nodeorder
+`,
+	}
 
+	expectedBackfillOptions := []string{
+		"true",
+		"false",
+	}
+
+	for i, config := range configurations {
+		testLoadSchedulerConfCases(config, expectedBackfillOptions[i], t)
+	}
+}
+
+func testLoadSchedulerConfCases(configuration string, expectedBackfillOption string, t *testing.T) {
 	trueValue := true
 	expectedTiers := []conf.Tier{
 		{
@@ -143,5 +173,21 @@ tiers:
 	if !reflect.DeepEqual(tiers, expectedTiers) {
 		t.Errorf("Failed to set default settings for plugins, expected: %+v, got %+v",
 			expectedTiers, tiers)
+	}
+
+	if len(config.Actions) != 2 ||
+		config.Actions[0].Name != "allocate" ||
+		len(config.Actions[0].Options) != 0 {
+		t.Errorf("Failed to set default settings for backfill, "+
+			"expected: len(config.Actions)==2, config.Action[1].Name=='allocate', config.Action[1].Options==[], got %+v",
+			config.Actions)
+	}
+
+	if config.Actions[1].Name != "backfill" ||
+		config.Actions[1].Options[conf.BackfillFlagName] != expectedBackfillOption {
+		t.Errorf("Failed to set default settings for backfill, "+
+			"expected: len(config.Actions)==2, config.Action[1].Name=='backfill', "+
+			"config.Action[1].Options[\"%s\"]==\"%s\", got %+v",
+			conf.BackfillFlagName, expectedBackfillOption, config.Actions)
 	}
 }

@@ -1,11 +1,15 @@
-actions: "reclaim, allocate, backfill, preempt"
+actions:
+- name: reclaim
+- name: allocate
+- name: backfill
+- name: preempt
 tiers:
-  - plugins:
-      - name: priority
-      - name: gang
-      - name: conformance
-  - plugins:
-      - name: drf
-      - name: predicates
-      - name: proportion
-      - name: nodeorder
+- plugins:
+  - name: priority
+  - name: gang
+  - name: conformance
+- plugins:
+  - name: drf
+  - name: predicates
+  - name: proportion
+  - name: nodeorder

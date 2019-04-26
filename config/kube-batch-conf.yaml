@@ -1,4 +1,6 @@
-actions: "allocate, backfill"
+actions:
+- name: allocate
+- name: backfill
 tiers:
 - plugins:
   - name: priority
@@ -9,4 +11,3 @@ tiers:
   - name: predicates
   - name: proportion
   - name: nodeorder
-enable-backfill: false
