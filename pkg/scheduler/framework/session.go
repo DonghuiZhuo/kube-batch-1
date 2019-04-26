@@ -22,7 +22,7 @@ import (
 
 	"github.com/golang/glog"
 
-	v1 "k8s.io/api/core/v1"
+	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/uuid"
@@ -58,6 +58,7 @@ type Session struct {
 	reclaimableFns      map[string]api.EvictableFn
 	overusedFns         map[string]api.ValidateFn
 	jobReadyFns         map[string]api.ValidateFn
+	jobBackfillReadyFns map[string]api.ValidateFn
 	jobPipelinedFns     map[string]api.ValidateFn
 	jobValidFns         map[string]api.ValidateExFn
 	backFillEligibleFns map[string]api.BackFillEligibleFn
@@ -82,6 +83,7 @@ func openSession(cache cache.Cache) *Session {
 		reclaimableFns:      map[string]api.EvictableFn{},
 		overusedFns:         map[string]api.ValidateFn{},
 		jobReadyFns:         map[string]api.ValidateFn{},
+		jobBackfillReadyFns: map[string]api.ValidateFn{},
 		jobPipelinedFns:     map[string]api.ValidateFn{},
 		jobValidFns:         map[string]api.ValidateExFn{},
 		backFillEligibleFns: map[string]api.BackFillEligibleFn{},

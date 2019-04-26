@@ -316,13 +316,14 @@ func TestBackFill(t *testing.T) {
 			schedulerCache.AddQueue(q)
 		}
 
-		jobReady := true
+		trueValue := true
 		ssn := framework.OpenSession(schedulerCache, []conf.Tier{
 			{
 				Plugins: []conf.PluginOption{
 					{
-						Name:            "gang",
-						EnabledJobReady: &jobReady,
+						Name:                    "gang",
+						EnabledJobReady:         &trueValue,
+						EnabledJobBackfillReady: &trueValue,
 					},
 				},
 			},

@@ -138,6 +138,12 @@ func (gp *gangPlugin) OnSessionOpen(ssn *framework.Session) {
 		ji := obj.(*api.JobInfo)
 		return ji.Ready()
 	})
+
+	ssn.AddJobBackfillReadyFn(gp.Name(), func(obj interface{}) bool {
+		ji := obj.(*api.JobInfo)
+		return ji.BackfillReady()
+	})
+
 	ssn.AddJobPipelinedFn(gp.Name(), func(obj interface{}) bool {
 		ji := obj.(*api.JobInfo)
 		return ji.Pipelined()
