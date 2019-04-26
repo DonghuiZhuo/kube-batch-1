@@ -69,12 +69,12 @@ const (
 	// A Ready job can be dispatch to a node right away.
 	Ready JobReadiness = 1 << iota
 
-	// OverResourceReady : a job is OverResourceReady if the job is not Ready for dispatch, but
+	// ConditionallyReady : a job is ConditionallyReady if the job is not Ready for dispatch, but
 	// the number of tasks in Allocated state exceeds the job's minim task
 	// number requirement. In other words,
 	// #(Allocated Tasks) < Job.MinAvailable &&
 	// #(Allocated Tasks) + #(AllocatedOverBackFill Tasks) >= Job.MinAvailable
-	OverResourceReady
+	ConditionallyReady
 
 	// NotReady : #(Allocated Tasks) + #(AllocatedOverBackFill Tasks) < Job.MinAvailable
 	NotReady

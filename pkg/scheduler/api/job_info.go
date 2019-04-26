@@ -54,8 +54,7 @@ type TaskInfo struct {
 
 	Pod *v1.Pod
 
-	// Indicates whether or not the task is a backfill task. Either persist
-	// across sessions, or add this flag in pod annotation.
+	// IsBackfill indicates whether or not the task is a backfill task.
 	IsBackfill bool
 }
 
@@ -72,7 +71,7 @@ func getJobID(pod *v1.Pod) JobID {
 }
 
 // CheckBackfill check if the pod has valid backfill annotation
-func CheckBackfill(pod *v1.Pod) bool {
+func checkBackfill(pod *v1.Pod) bool {
 	if len(pod.Annotations) != 0 {
 		if val, found := pod.Annotations[v1alpha1.BackfillAnnotationKey]; found && len(val) != 0 {
 			hasBackfillAnnotation, err := strconv.ParseBool(val)
@@ -115,7 +114,7 @@ func NewTaskInfo(pod *v1.Pod) *TaskInfo {
 		Pod:        pod,
 		Resreq:     req,
 		InitResreq: initResreq,
-		IsBackfill: CheckBackfill(pod),
+		IsBackfill: checkBackfill(pod),
 	}
 
 	if pod.Spec.Priority != nil {
@@ -405,23 +404,20 @@ func (ji *JobInfo) FitError() string {
 	return reasonMsg
 }
 
-// GetReadiness Check whether the job is read or over-resource-ready
-// over-resource-ready means the job is ready but some resource
-// is used by backfilled job
-func (ji *JobInfo) GetReadiness() JobReadiness {
+// GetBackillReadiness checks whether the job is ready or ready
+// using backill job's resources ConditionallyReady means the
+// job is ready but some resource is used by backfilled job
+func (ji *JobInfo) BackfillReady() bool {
 	allocatedTasks := ji.GetTasks(AllocatedStatuses()...)
 	allocatedTasksCnt := int32(len(allocatedTasks))
-	if allocatedTasksCnt >= ji.MinAvailable {
-		return Ready
-	}
 
 	allocatedOverBackfillTasks := ji.GetTasks(AllocatedOverBackfill)
 	allocatedOverBackfillTasksCnt := int32(len(allocatedOverBackfillTasks))
 	if allocatedTasksCnt+allocatedOverBackfillTasksCnt >= ji.MinAvailable {
-		return OverResourceReady
+		return true
 	}
 
-	return NotReady
+	return false
 }
 
 // ReadyTaskNum returns the number of tasks that are ready.

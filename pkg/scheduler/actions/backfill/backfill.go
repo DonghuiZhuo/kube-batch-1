@@ -77,6 +77,7 @@ func (alloc *backfillAction) Execute(ssn *framework.Session) {
 
 	backfillEnabled, err := strconv.ParseBool(ssn.ActionOptions[conf.BackfillFlagName])
 	if err != nil {
+		glog.V(3).Infof("backfilling non best effort jobs is disabled")
 		return
 	}
 
@@ -94,7 +95,7 @@ func (alloc *backfillAction) Execute(ssn *framework.Session) {
 		// we can back fill more jobs in the next step.
 		resourceReleased := false
 		for _, job := range ssn.Jobs {
-			if ssn.JobReady(job) || job.GetReadiness() == api.OverResourceReady {
+			if ssn.JobReady(job) || ssn.JobBackfillReady(job) {
 				glog.V(3).Infof("Disable backfill on job <%v/%v>", job.Namespace, job.Name)
 			} else {
 				releaseReservedResources(ssn, job)

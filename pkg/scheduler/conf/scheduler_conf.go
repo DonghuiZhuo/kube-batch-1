@@ -46,6 +46,8 @@ type PluginOption struct {
 	EnabledJobOrder *bool `yaml:"enableJobOrder"`
 	// EnabledJobReady defines whether jobReadyFn is enabled
 	EnabledJobReady *bool `yaml:"enableJobReady"`
+	// EnabledJobBackfillReady defines whether jobBackfillReadyFn is enabled
+	EnabledJobBackfillReady *bool `yaml:"enableJobBackfillReady"`
 	// EnabledJobPipelined defines whether jobPipelinedFn is enabled
 	EnabledJobPipelined *bool `yaml:"enableJobPipelined"`
 	// EnabledTaskOrder defines whether taskOrderFn is enabled
