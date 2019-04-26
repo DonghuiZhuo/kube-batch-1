@@ -19,16 +19,22 @@ package conf
 // SchedulerConfiguration defines the configuration of scheduler.
 type SchedulerConfiguration struct {
 	// Actions defines the actions list of scheduler in order
-	Actions string `yaml:"actions"`
+	Actions []SchedulerAction `yaml:"actions"`
 	// Tiers defines plugins in different tiers
 	Tiers []Tier `yaml:"tiers"`
-	// Enables backfill
-	EnableBackfill bool `yaml:"enable-backfill"`
 }
+
+const BackfillFlagName = "enabledNonBestEffort"
 
 // Tier defines plugin tier
 type Tier struct {
 	Plugins []PluginOption `yaml:"plugins"`
+}
+
+// Tier defines plugin tier
+type SchedulerAction struct {
+	Name string `yaml:"name"`
+	Options map[string]string `yaml:"options"`
 }
 
 // PluginOption defines the options of plugin

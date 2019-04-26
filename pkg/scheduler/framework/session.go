@@ -45,7 +45,7 @@ type Session struct {
 	Queues         map[api.QueueID]*api.QueueInfo
 	Backlog        []*api.JobInfo
 	Tiers          []conf.Tier
-	EnableBackfill bool
+	ActionOptions  map[string]string
 
 	plugins             map[string]Plugin
 	eventHandlers       []*EventHandler

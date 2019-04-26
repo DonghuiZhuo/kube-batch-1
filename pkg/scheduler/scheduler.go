@@ -36,6 +36,7 @@ type Scheduler struct {
 	cache          schedcache.Cache
 	config         *rest.Config
 	actions        []framework.Action
+	actionOptions  map[string]map[string]string
 	plugins        []conf.Tier
 	schedulerConf  string
 	schedulePeriod time.Duration
@@ -81,8 +82,7 @@ func (pc *Scheduler) Run(stopCh <-chan struct{}) {
 	var config *conf.SchedulerConfiguration
 	if config, err = loadSchedulerConf(schedConf); err == nil {
 		pc.plugins = config.Tiers
-		pc.enableBackfill = config.EnableBackfill
-		pc.actions, err = getActions(config)
+		pc.actions, pc.actionOptions, err = getActions(config)
 	} else {
 		glog.Errorf("Failed to read scheduler configuration '%s': %s",
 			schedConf, err)
@@ -93,6 +93,7 @@ func (pc *Scheduler) Run(stopCh <-chan struct{}) {
 	go wait.Until(pc.runOnce, pc.schedulePeriod, stopCh)
 }
 
+
 func (pc *Scheduler) runOnce() {
 	glog.V(4).Infof("Start scheduling ...")
 	scheduleStartTime := time.Now()
@@ -100,11 +101,11 @@ func (pc *Scheduler) runOnce() {
 	defer metrics.UpdateE2eDuration(metrics.Duration(scheduleStartTime))
 
 	ssn := framework.OpenSession(pc.cache, pc.plugins)
-	ssn.EnableBackfill = pc.enableBackfill
 	defer framework.CloseSession(ssn)
 
 	for _, action := range pc.actions {
 		actionStartTime := time.Now()
+		ssn.ActionOptions = pc.actionOptions[action.Name()]
 		action.Execute(ssn)
 		metrics.UpdateActionDuration(action.Name(), metrics.Duration(actionStartTime))
 	}

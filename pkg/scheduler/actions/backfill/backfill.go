@@ -18,10 +18,15 @@ package backfill
 
 import (
 	"github.com/golang/glog"
+	"github.com/kubernetes-sigs/kube-batch/pkg/scheduler/conf"
+	"strconv"
 
 	"github.com/kubernetes-sigs/kube-batch/pkg/scheduler/api"
 	"github.com/kubernetes-sigs/kube-batch/pkg/scheduler/framework"
 )
+
+
+
 
 type backfillAction struct {
 	ssn *framework.Session
@@ -69,7 +74,16 @@ func (alloc *backfillAction) Execute(ssn *framework.Session) {
 		}
 	}
 
-	if ssn.EnableBackfill {
+	if ssn.ActionOptions == nil {
+		return
+	}
+
+	backfillEnabled, err := strconv.ParseBool(ssn.ActionOptions[conf.BackfillFlagName])
+	if err != nil {
+		return
+	}
+
+	if backfillEnabled {
 		// Collect back fill candidates
 		backFillCandidates := make([]*api.JobInfo, 0, len(ssn.Jobs))
 		for _, job := range ssn.Jobs {
