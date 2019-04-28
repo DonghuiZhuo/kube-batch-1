@@ -40,12 +40,11 @@ type Session struct {
 
 	cache cache.Cache
 
-	Jobs          map[api.JobID]*api.JobInfo
-	Nodes         map[string]*api.NodeInfo
-	Queues        map[api.QueueID]*api.QueueInfo
-	Backlog       []*api.JobInfo
-	Tiers         []conf.Tier
-	ActionOptions map[string]string
+	Jobs    map[api.JobID]*api.JobInfo
+	Nodes   map[string]*api.NodeInfo
+	Queues  map[api.QueueID]*api.QueueInfo
+	Backlog []*api.JobInfo
+	Tiers   []conf.Tier
 
 	plugins             map[string]Plugin
 	eventHandlers       []*EventHandler
