@@ -77,26 +77,21 @@ func loadSchedulerConf(confStr string) (*conf.SchedulerConfiguration, error) {
 	return schedulerConf, nil
 }
 
-func getActions(schedulerConf *conf.SchedulerConfiguration) ([]framework.Action, map[string]map[string]string, error) {
+func getActions(schedulerConf *conf.SchedulerConfiguration) ([]framework.Action, error) {
 	var actions []framework.Action
-	var actionOptions = map[string]map[string]string{}
 
 	for _, confAction := range schedulerConf.Actions {
-		var action framework.Action
 		var found bool
-		if action, found = framework.GetAction(confAction.Name); !found {
-			return nil, nil, fmt.Errorf("failed to found Action %s, ignore it", action.Name())
+		var actionBuilder framework.ActionBuilder
+		if actionBuilder, found = framework.GetAction(confAction.Name); !found {
+			return nil, fmt.Errorf("failed to found Action %s, ignore it", confAction.Name)
 		}
 
+		action := actionBuilder(confAction.Options)
 		actions = append(actions, action)
-		if action.Name() == "backfill" {
-			actionOptions["backfill"] = map[string]string{
-				conf.BackfillFlagName: confAction.Options[conf.BackfillFlagName],
-			}
-		}
 	}
 
-	return actions, actionOptions, nil
+	return actions, nil
 }
 
 func readSchedulerConf(confPath string) (string, error) {

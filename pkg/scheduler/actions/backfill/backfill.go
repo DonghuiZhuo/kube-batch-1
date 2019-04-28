@@ -26,11 +26,14 @@ import (
 )
 
 type backfillAction struct {
-	ssn *framework.Session
+	ssn       *framework.Session
+	arguments framework.Arguments
 }
 
-func New() *backfillAction {
-	return &backfillAction{}
+func New(args framework.Arguments) framework.Action {
+	return &backfillAction{
+		arguments: args,
+	}
 }
 
 func (alloc *backfillAction) Name() string {
@@ -71,11 +74,11 @@ func (alloc *backfillAction) Execute(ssn *framework.Session) {
 		}
 	}
 
-	if ssn.ActionOptions == nil {
+	if len(alloc.arguments) == 0 {
 		return
 	}
 
-	backfillEnabled, err := strconv.ParseBool(ssn.ActionOptions[conf.BackfillFlagName])
+	backfillEnabled, err := strconv.ParseBool(alloc.arguments[conf.BackfillFlagName])
 	if err != nil {
 		glog.V(3).Infof("backfilling non best effort jobs is disabled")
 		return

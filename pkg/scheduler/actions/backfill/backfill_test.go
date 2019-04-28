@@ -281,7 +281,10 @@ func TestBackFill(t *testing.T) {
 		},
 	}
 
-	backFill := New()
+	arguments := framework.Arguments{
+		conf.BackfillFlagName: "true",
+	}
+	backFill := New(arguments)
 	for i, test := range tests {
 		binder := &fakeBinder{
 			binds: map[string]string{},
@@ -338,10 +341,6 @@ func TestBackFill(t *testing.T) {
 					}
 				}
 			}
-		}
-
-		ssn.ActionOptions = map[string]string{
-			conf.BackfillFlagName: "true",
 		}
 
 		go func(session *framework.Session) {

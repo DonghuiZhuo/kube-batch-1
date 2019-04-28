@@ -82,7 +82,7 @@ func (pc *Scheduler) Run(stopCh <-chan struct{}) {
 	var config *conf.SchedulerConfiguration
 	if config, err = loadSchedulerConf(schedConf); err == nil {
 		pc.plugins = config.Tiers
-		pc.actions, pc.actionOptions, err = getActions(config)
+		pc.actions, err = getActions(config)
 	} else {
 		glog.Errorf("Failed to read scheduler configuration '%s': %s",
 			schedConf, err)
@@ -104,7 +104,6 @@ func (pc *Scheduler) runOnce() {
 
 	for _, action := range pc.actions {
 		actionStartTime := time.Now()
-		ssn.ActionOptions = pc.actionOptions[action.Name()]
 		action.Execute(ssn)
 		metrics.UpdateActionDuration(action.Name(), metrics.Duration(actionStartTime))
 	}
