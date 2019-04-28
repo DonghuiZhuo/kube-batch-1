@@ -257,7 +257,7 @@ func (ssn *Session) Allocate(task *api.TaskInfo, node *api.NodeInfo) error {
 		usingBackfillTaskRes := !task.InitResreq.LessEqual(node.Idle)
 		newStatus := api.Allocated
 		if usingBackfillTaskRes {
-			newStatus = api.AllocatedOverBackfill
+			newStatus = api.Borrowing
 		}
 
 		if err := job.UpdateTaskStatus(task, newStatus); err != nil {
@@ -304,7 +304,7 @@ func (ssn *Session) Allocate(task *api.TaskInfo, node *api.NodeInfo) error {
 		finished := make(chan bool, 1)
 
 		for _, pendingTask := range job.TaskStatusIndex[api.Allocated] {
-			if pendingTask.IsBackfill {
+			if pendingTask.Condition.IsBackfill {
 
 				wg.Add(1)
 				go func(pendingTask *api.TaskInfo) {

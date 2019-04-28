@@ -23,12 +23,11 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/kubernetes-sigs/kube-batch/pkg/apis/scheduling/v1alpha1"
 	"k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-
-	"github.com/kubernetes-sigs/kube-batch/pkg/apis/scheduling/v1alpha1"
 )
 
 // TaskID is UID type for Task
@@ -54,8 +53,8 @@ type TaskInfo struct {
 
 	Pod *v1.Pod
 
-	// IsBackfill indicates whether or not the task is a backfill task.
-	IsBackfill bool
+	//Condition task condition
+	Condition TaskCondition
 }
 
 func getJobID(pod *v1.Pod) JobID {
@@ -97,6 +96,10 @@ func NewTaskInfo(pod *v1.Pod) *TaskInfo {
 
 	jobID := getJobID(pod)
 
+	cond := TaskCondition{
+		IsBackfill: checkBackfill(pod),
+	}
+
 	ti := &TaskInfo{
 		UID:        TaskID(pod.UID),
 		Job:        jobID,
@@ -108,7 +111,7 @@ func NewTaskInfo(pod *v1.Pod) *TaskInfo {
 		Pod:        pod,
 		Resreq:     req,
 		InitResreq: initResreq,
-		IsBackfill: checkBackfill(pod),
+		Condition:  cond,
 	}
 
 	if pod.Spec.Priority != nil {
@@ -132,14 +135,14 @@ func (ti *TaskInfo) Clone() *TaskInfo {
 		Resreq:      ti.Resreq.Clone(),
 		InitResreq:  ti.InitResreq.Clone(),
 		VolumeReady: ti.VolumeReady,
-		IsBackfill:  ti.IsBackfill,
+		Condition:   ti.Condition,
 	}
 }
 
 // String returns the taskInfo details in a string
 func (ti TaskInfo) String() string {
 	return fmt.Sprintf("Task (%v:%v/%v): job %v, status %v, pri %v, resreq %v, IsBackfill %v",
-		ti.UID, ti.Namespace, ti.Name, ti.Job, ti.Status, ti.Priority, ti.Resreq, ti.IsBackfill)
+		ti.UID, ti.Namespace, ti.Name, ti.Job, ti.Status, ti.Priority, ti.Resreq, ti.Condition.IsBackfill)
 }
 
 // JobID is the type of JobInfo's ID.
@@ -405,7 +408,7 @@ func (ji *JobInfo) BackfillReady() bool {
 	allocatedTasks := ji.GetTasks(AllocatedStatuses()...)
 	allocatedTasksCnt := int32(len(allocatedTasks))
 
-	allocatedOverBackfillTasks := ji.GetTasks(AllocatedOverBackfill)
+	allocatedOverBackfillTasks := ji.GetTasks(Borrowing)
 	allocatedOverBackfillTasksCnt := int32(len(allocatedOverBackfillTasks))
 	if allocatedTasksCnt+allocatedOverBackfillTasksCnt >= ji.MinAvailable {
 		return true
@@ -444,7 +447,7 @@ func (ji *JobInfo) ValidTaskNum() int32 {
 	occupied := 0
 	for status, tasks := range ji.TaskStatusIndex {
 		if AllocatedStatus(status) ||
-			status == AllocatedOverBackfill ||
+			status == Borrowing ||
 			status == Succeeded ||
 			status == Pipelined ||
 			status == Pending {

@@ -126,7 +126,7 @@ func (ni *NodeInfo) AddTask(task *TaskInfo) error {
 	ti := task.Clone()
 
 	if ni.Node != nil {
-		if task.IsBackfill {
+		if task.Condition.IsBackfill {
 			ni.Backfilled.Add(task.Resreq)
 		}
 
@@ -165,7 +165,7 @@ func (ni *NodeInfo) RemoveTask(ti *TaskInfo) error {
 	}
 
 	if ni.Node != nil {
-		if task.IsBackfill {
+		if task.Condition.IsBackfill {
 			ni.Backfilled.Sub(task.Resreq)
 		}
 

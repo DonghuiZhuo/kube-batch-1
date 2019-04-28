@@ -23,11 +23,11 @@ const (
 	// Pending means the task is pending in the apiserver.
 	Pending TaskStatus = 1 << iota
 
-	// AllocatedOverBackfill means that the task is allocated with resources
-	// that are currently occupied by backfill tasks.
-	// Task T is allocated to Node N as an AllocatedOverBackfill task if,
+	// Borrowing means that the task is allocated borrowing resources
+	// that are currently occupied by tasks.
+	// Task T is allocated to Node N as an Borrowing task if,
 	// and only if, N.IdleResource < T.RequestResource <= N.AllocatableResource.
-	AllocatedOverBackfill
+	Borrowing
 
 	// Allocated means the scheduler assigns a host to it.
 	Allocated
@@ -58,6 +58,10 @@ const (
 	// Unknown means the status of task/pod is unknown to the scheduler.
 	Unknown
 )
+
+type TaskCondition struct {
+	IsBackfill bool
+}
 
 // JobReadiness type of job readiness
 type JobReadiness int
@@ -91,8 +95,8 @@ func (ts TaskStatus) String() string {
 		return "Pending"
 	case Allocated:
 		return "Allocated"
-	case AllocatedOverBackfill:
-		return "AllocatedOverBackfill"
+	case Borrowing:
+		return "Borrowing"
 	case Binding:
 		return "Binding"
 	case Bound:
